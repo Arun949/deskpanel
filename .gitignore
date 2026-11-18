@@ -1,0 +1,17 @@
+bin/
+obj/
+*.user
+.vs/
+.idea/
+.DS_Store
+TestResults/
+node_modules/
+panel/dist/
+android/.gradle/
+android/build/
+android/app/build/
+local.properties
+*.keystore
+*.jks
+.claude/
+.kotlin/

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <AssemblyName>DeskPanelAgent</AssemblyName>
+    <RootNamespace>DeskPanel.Agent</RootNamespace>
+    <Description>DeskPanel desktop agent: serves the phone panel over an authenticated local API.</Description>
+    <!-- needed by the LibraryImport source generator (Mach / sysctl calls); no hand-written unsafe code -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DeskPanel.Agent.Tests" />
+  </ItemGroup>
+
+</Project>

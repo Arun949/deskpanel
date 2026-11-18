@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/no_backup"
+        android:fullBackupContent="false"
+        android:label="DeskPanel"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="sensorLandscape">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          Receives the device key from the PC over adb (`adb shell content call`). Two locks, so no other app can plant
+          or read a key: the DUMP permission (held by the adb shell, never grantable to third-party apps) and, in code,
+          a check that the caller's uid is the shell's (2000).
+        -->
+        <provider
+            android:name=".EnrolProvider"
+            android:authorities="app.deskpanel.enrol"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
+    </application>
+</manifest>

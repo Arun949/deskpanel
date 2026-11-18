@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/agent/">
+    <Project Path="agent/DeskPanel.Agent/DeskPanel.Agent.csproj" />
+    <Project Path="agent/DeskPanel.Agent.Tests/DeskPanel.Agent.Tests.csproj" />
+  </Folder>
+</Solution>
