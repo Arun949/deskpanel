@@ -1,6 +1,6 @@
 # DeskPanel threat model
 
-Status: **M2** (safe controls) on branch `m2/safe-controls`: verified on a LAVA LXX504, including permission refusal and volume control. Update this file in the same pull request as any change that adds a route, a file read, an outbound connection, a stored secret, or a control action.
+Status: **M3** (layout editor) on branch `m3/layout-editor`: verified on a LAVA LXX504. Update this file in the same pull request as any change that adds a route, a file read, an outbound connection, a stored secret, or a control action.
 
 ## Assets
 | Asset | Where |
@@ -37,6 +37,9 @@ Status: **M2** (safe controls) on branch `m2/safe-controls`: verified on a LAVA 
 
 | T14 | A hiccup on the phone revokes a working enrolment (found on the real phone in M2) | Only an explicit `enrolled=false` from the app triggers re-enrolment; no answer = try again | `AnAppThatDoesNotAnswerKeepsItsEnrolment`, `StatusAnswersAreReadStrictly` | **M2 done** |
 | T15 | A tap retried after a network error runs twice | `Idempotency-Key` per tap (agent remembers 2 min); app never retries a POST | `ARetriedRequestWithTheSameIdempotencyKeyRunsOnce`, panel `controls.test.ts` | **M2 done** |
+
+| T16 | A layout carries unexpected data to the phone (scripts, URLs, wrong types) | Every saved option is checked against the catalogue schema (type, range, choices, id lists); unknown options and widget types refused with exact paths; hand edits are cleaned on load | `CatalogTests`, `LayoutEditorApiTests`, panel `catalog.test.ts` | **M3 done** |
+| T17 | Two editors overwrite each other's layout | Save carries a content-hash version; a stale version gets 409 and nothing is written | `ASaveOverSomeoneElsesChangeIsAConflict` | **M3 done** |
 
 ## Explicit non-goals (MVP)
 - Defending against malware already running as the same user on the PC (it can read the agent's files anyway).

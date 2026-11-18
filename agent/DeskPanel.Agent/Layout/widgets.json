@@ -1,0 +1,46 @@
+[
+  {
+    "type": "clock", "name": "Clock", "icon": "🕒", "desc": "Time and date.",
+    "w": 4, "h": 2, "minW": 2, "minH": 1,
+    "options": [
+      { "key": "showSeconds", "label": "Show seconds", "type": "bool", "default": true }
+    ]
+  },
+  {
+    "type": "pomodoro", "name": "Pomodoro", "icon": "🍅", "desc": "Focus and break timer; rings on any page.",
+    "w": 3, "h": 3, "minW": 2, "minH": 2,
+    "options": [
+      { "key": "focusMin", "label": "Focus minutes", "type": "number", "default": 25, "min": 1, "max": 120 },
+      { "key": "breakMin", "label": "Break minutes", "type": "number", "default": 5, "min": 1, "max": 60 }
+    ]
+  },
+  {
+    "type": "stat", "name": "System stat", "icon": "📈", "desc": "CPU, memory or network with a 60-second sparkline.",
+    "w": 3, "h": 3, "minW": 2, "minH": 2,
+    "options": [
+      { "key": "metric", "label": "Metric", "type": "select", "default": "cpu", "choices": ["cpu", "ram", "net"] }
+    ]
+  },
+  {
+    "type": "now-playing", "name": "Now playing", "icon": "🎵", "desc": "Track, artist and progress from Spotify or Music.",
+    "w": 5, "h": 2, "minW": 3, "minH": 1,
+    "options": []
+  },
+  {
+    "type": "media-controls", "name": "Media controls", "icon": "⏯", "desc": "Previous, play/pause, next. Needs the media.control grant.",
+    "w": 5, "h": 1, "minW": 3, "minH": 1,
+    "options": []
+  },
+  {
+    "type": "volume", "name": "Volume", "icon": "🔊", "desc": "Output volume and mute. Needs the volume.control grant.",
+    "w": 4, "h": 1, "minW": 3, "minH": 1,
+    "options": []
+  },
+  {
+    "type": "shortcuts", "name": "Shortcuts", "icon": "🚀", "desc": "Buttons for actions defined under Actions. Needs apps.launch / keys.send.",
+    "w": 3, "h": 3, "minW": 2, "minH": 1,
+    "options": [
+      { "key": "actions", "label": "Actions (ids, comma-separated)", "type": "idlist", "default": "", "maxItems": 12 }
+    ]
+  }
+]

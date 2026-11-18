@@ -3,7 +3,7 @@
 An old Android phone as a desk panel and safe control surface for your computer, connected over USB.
 It's an independent design informed by a study of PhoneBox; see `docs/THREAT_MODEL.md` for the security model.
 
-**Status: M2 (safe controls).** Verified on a real phone. Phones are enrolled over adb after a yes in a Mac dialog. Each phone has its own key, and the app checks the agent's proof before sending it. The dashboard shows a clock, Pomodoro timer, CPU/memory/network and now playing (Spotify/Music). Phones can control media, volume, approved apps and key combinations, each only after you grant it in the settings page (`tools/admin.sh`). Every control is rate-limited, deduplicated and logged.
+**Status: M3 (layout editor).** Verified on a real phone. Phones are enrolled over adb after a yes in a Mac dialog. Each phone has its own key, and the app checks the agent's proof before sending it. The dashboard shows a clock, Pomodoro timer, CPU/memory/network and now playing (Spotify/Music). Phones can control media, volume, approved apps and key combinations, each only after you grant it in the settings page (`tools/admin.sh`). Every control is rate-limited, deduplicated and logged. Layouts are edited in the settings page (Layout tab): drag, resize, set options; the agent checks every save against the widget catalogue (`agent/DeskPanel.Agent/Layout/widgets.json`) and the phone shows it within seconds.
 
 ## Layout
 ```

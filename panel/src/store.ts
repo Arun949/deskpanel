@@ -13,6 +13,8 @@ export interface StateMessage {
   metrics: Metrics | null;
   media: Media | null;
   volume: Volume | null;
+  /** Changes when the computer's layout changes (an editor save): reload it at once. */
+  layoutVersion?: string | null;
 }
 
 export interface LiveState {

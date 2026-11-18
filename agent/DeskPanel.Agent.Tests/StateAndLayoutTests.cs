@@ -89,8 +89,9 @@ public sealed class LayoutValidationTests
     [Fact]
     public void WidgetsAreClampedOntoTheGrid()
     {
+        // a clock is at least 2×1 (catalogue), so it is pulled in from the edge to fit
         var w = LayoutStore.Validate(new LayoutDoc(1, [W("a", "clock", x: 11, y: 9, w: 6, h: 0)])).Widgets.Single();
-        Assert.Equal((11, 5, 1, 1), (w.X, w.Y, w.W, w.H));
+        Assert.Equal((10, 5, 2, 1), (w.X, w.Y, w.W, w.H));
     }
 
     [Fact]
@@ -103,8 +104,9 @@ public sealed class LayoutValidationTests
             ["nested"] = JsonSerializer.SerializeToElement(new { cmd = "rm -rf ~" }),
             ["long"] = JsonSerializer.SerializeToElement(new string('x', 201)),
         };
+        // only options the catalogue defines for 'stat', with valid values, survive a hand edit
         var opts = LayoutStore.Validate(new LayoutDoc(1, [W("a", "stat", o: o)])).Widgets.Single().Options!;
-        Assert.Equal(["metric", "seconds"], opts.Keys.Order());
+        Assert.Equal(["metric"], opts.Keys.Order());
     }
 
     [Fact]

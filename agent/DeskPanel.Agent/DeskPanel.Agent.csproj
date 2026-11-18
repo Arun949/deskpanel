@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Admin/wwwroot/*.*" LogicalName="admin/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Layout/widgets.json" LogicalName="widgets.json" />
   </ItemGroup>
 
   <ItemGroup>

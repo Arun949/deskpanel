@@ -9,6 +9,7 @@ import { Page } from './layout';
 import type { LiveView, WidgetConfig } from './registry';
 import { apply, emptyState, isStale, type StateMessage } from './store';
 import { getJson, subscribe, type LayoutDoc } from './transport';
+import { applyScreenCare } from './screen';
 
 /** Shown until the agent's layout arrives (first start, or the PC is not reachable yet). */
 const FALLBACK_LAYOUT: WidgetConfig[] = [
@@ -31,9 +32,15 @@ const page = new Page(pager, live);
 page.mount(FALLBACK_LAYOUT);
 
 let streaming = false;
+let knownLayoutVersion: string | null = null;
 
 function onMessage(msg: StateMessage): void {
   for (const kind of apply(state, msg, Date.now())) page.emit(kind);
+  if (msg.layoutVersion && msg.layoutVersion !== knownLayoutVersion) {
+    const first = knownLayoutVersion === null;
+    knownLayoutVersion = msg.layoutVersion;
+    if (!first) void loadLayout(false); // saved in the editor: show it now, not in 30 s
+  }
 }
 
 subscribe((e) => {
@@ -56,7 +63,9 @@ let layoutJson = '';
  * Loads the layout, and checks it again every 30 s: a change made on the computer (layout.json, actions) shows up
  * without restarting the app. Widgets are re-created only when something actually changed.
  */
-async function loadLayout(): Promise<void> {
+let layoutTimer: ReturnType<typeof setTimeout> | undefined;
+
+async function loadLayout(schedule = true): Promise<void> {
   let next = 30_000;
   try {
     const doc = await getJson<LayoutDoc>('/layout');
@@ -69,7 +78,7 @@ async function loadLayout(): Promise<void> {
   } catch {
     if (!layoutJson) next = 5000; // still on the fallback page: try again soon
   }
-  setTimeout(loadLayout, next);
+  if (schedule) { clearTimeout(layoutTimer); layoutTimer = setTimeout(loadLayout, next); }
 }
 
 /** Offline / stale badge with the age of the data (PhoneBox showed no data age, Module 10). */
@@ -80,7 +89,7 @@ function renderBadge(now: number): void {
   badge.dataset['kind'] = 'ok';
 }
 
-setInterval(() => { page.emit('tick'); renderBadge(Date.now()); }, 1000);
+setInterval(() => { page.emit('tick'); renderBadge(Date.now()); applyScreenCare(document.documentElement, new Date()); }, 1000);
 document.addEventListener('visibilitychange', () => { page.visible = !document.hidden; page.catchUp(); });
 void loadLayout();
 void poll();

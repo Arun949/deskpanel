@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using DeskPanel.Agent.Core;
@@ -8,31 +9,58 @@ public sealed record WidgetConfig(string Id, string Type, int X, int Y, int W, i
 
 public sealed record LayoutDoc(int SchemaVersion, IReadOnlyList<WidgetConfig> Widgets);
 
+public enum SaveOutcome { Saved, Invalid, Conflict }
+
 /// <summary>
 /// layout.json: the one page the phone shows. It is phone-visible by design, so it must never hold commands, paths, URLs
-/// or secrets; it is validated on every load. M3 replaces the hand-edited file with the editor and a JSON schema.
+/// or secrets. Two ways in: the editor (strict: <see cref="Catalog.Check"/>, every error reported, version-checked) and a
+/// hand edit of the file (forgiving: <see cref="Validate"/> drops or clamps what doesn't fit, so the phone still shows a page).
 /// </summary>
 public sealed partial class LayoutStore(AgentPaths paths)
 {
-    public const int Cols = 12, Rows = 6, MaxWidgets = 30;
-    public static readonly IReadOnlySet<string> Types = new HashSet<string>(StringComparer.Ordinal)
-        { "clock", "pomodoro", "stat", "now-playing", "media-controls", "volume", "shortcuts" };
+    public const int Cols = Catalog.Cols, Rows = Catalog.Rows, MaxWidgets = Catalog.MaxWidgets;
+    public static readonly IReadOnlySet<string> Types = Catalog.Widgets.Select(w => w.Type).ToHashSet(StringComparer.Ordinal);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private readonly Lock _lock = new();
-    private (DateTime Stamp, LayoutDoc Doc)? _cache;
+    private (DateTime Stamp, long Length, LayoutDoc Doc, string Version)? _cache;
 
-    public LayoutDoc Get()
+    public LayoutDoc Get() => Current().Doc;
+
+    /// <summary>
+    /// A version for optimistic concurrency: a hash of the file's bytes (not its write time, whose resolution and JSON
+    /// round-trip caused false conflicts in PhoneBox, Module 2). It also tells the phone when to reload its layout.
+    /// </summary>
+    public string Version => Current().Version;
+
+    private (LayoutDoc Doc, string Version) Current()
     {
         lock (_lock)
         {
             if (!File.Exists(paths.Layout)) PrivateFile.WriteAtomic(paths.Layout, JsonSerializer.Serialize(Default, Json));
-            var stamp = File.GetLastWriteTimeUtc(paths.Layout);
-            if (_cache is { } c && c.Stamp == stamp) return c.Doc;
+            var info = new FileInfo(paths.Layout);
+            if (_cache is { } c && c.Stamp == info.LastWriteTimeUtc && c.Length == info.Length) return (c.Doc, c.Version);
+            var bytes = File.ReadAllBytes(paths.Layout);
             LayoutDoc doc;
-            try { doc = Validate(JsonSerializer.Deserialize<LayoutDoc>(File.ReadAllText(paths.Layout), Json)); }
+            try { doc = Validate(JsonSerializer.Deserialize<LayoutDoc>(bytes, Json)); }
             catch (JsonException) { doc = Default; } // a broken hand edit shows the default page, not an error
-            _cache = (stamp, doc);
-            return doc;
+            var version = Convert.ToHexStringLower(SHA256.HashData(bytes))[..16];
+            _cache = (info.LastWriteTimeUtc, info.Length, doc, version);
+            return (doc, version);
+        }
+    }
+
+    /// <summary>Saves an edited layout if it is valid and nobody changed the file since <paramref name="expectedVersion"/>.</summary>
+    public (SaveOutcome Outcome, IReadOnlyList<LayoutError> Errors, string Version) Save(LayoutDoc doc, string? expectedVersion)
+    {
+        var errors = Catalog.Check(doc);
+        lock (_lock)
+        {
+            var current = Current().Version;
+            if (errors.Count > 0) return (SaveOutcome.Invalid, errors, current);
+            if (expectedVersion != current) return (SaveOutcome.Conflict, [], current);
+            PrivateFile.WriteAtomic(paths.Layout, JsonSerializer.Serialize(doc with { SchemaVersion = 1 }, Json));
+            _cache = null;
+            return (SaveOutcome.Saved, [], Current().Version);
         }
     }
 
@@ -60,7 +88,10 @@ public sealed partial class LayoutStore(AgentPaths paths)
         new("shortcuts", "shortcuts", 9, 3, 3, 3, Opt("actions", "")),
     ]);
 
-    /// <summary>Known types only, unique slug ids, inside the grid, options limited to short strings, numbers and booleans.</summary>
+    /// <summary>
+    /// Forgiving read of a hand-edited file: unknown types and bad or duplicate ids are dropped, sizes clamped to the
+    /// catalogue's minimum and the grid, and any option the catalogue would refuse is dropped.
+    /// </summary>
     public static LayoutDoc Validate(LayoutDoc? doc)
     {
         if (doc?.Widgets is null) return Default;
@@ -68,35 +99,23 @@ public sealed partial class LayoutStore(AgentPaths paths)
         var widgets = new List<WidgetConfig>();
         foreach (var w in doc.Widgets.Take(MaxWidgets))
         {
-            if (w is null || !Types.Contains(w.Type) || !IdRe().IsMatch(w.Id ?? "") || !ids.Add(w.Id!)) continue;
-            var x = Math.Clamp(w.X, 0, Cols - 1);
-            var y = Math.Clamp(w.Y, 0, Rows - 1);
-            widgets.Add(w with { X = x, Y = y, W = Math.Clamp(w.W, 1, Cols - x), H = Math.Clamp(w.H, 1, Rows - y), Options = CleanOptions(w.Options) });
+            if (w is null || Catalog.Get(w.Type ?? "") is not { } def || !IdRe().IsMatch(w.Id ?? "") || !ids.Add(w.Id!)) continue;
+            var x = Math.Clamp(w.X, 0, Cols - def.MinW);
+            var y = Math.Clamp(w.Y, 0, Rows - def.MinH);
+            widgets.Add(w with
+            {
+                X = x, Y = y,
+                W = Math.Clamp(w.W, def.MinW, Cols - x), H = Math.Clamp(w.H, def.MinH, Rows - y),
+                Options = w.Options?.Where(kv => Catalog.Check(new LayoutDoc(1, [new(w.Id!, w.Type!, 0, 0, Cols, Rows,
+                    new() { [kv.Key] = kv.Value })])).Count == 0).ToDictionary(kv => kv.Key, kv => kv.Value.Clone()),
+            });
         }
         return new LayoutDoc(1, widgets);
-    }
-
-    private static Dictionary<string, JsonElement>? CleanOptions(Dictionary<string, JsonElement>? options)
-    {
-        if (options is null) return null;
-        var clean = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
-        foreach (var (key, value) in options.Take(20))
-        {
-            if (!IdRe().IsMatch(key)) continue;
-            var ok = value.ValueKind switch
-            {
-                JsonValueKind.String => value.GetString()!.Length <= 200,
-                JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => true,
-                _ => false, // no objects or arrays in M1
-            };
-            if (ok) clean[key] = value.Clone();
-        }
-        return clean;
     }
 
     private static Dictionary<string, JsonElement> Opt(string key, string value) =>
         new(StringComparer.Ordinal) { [key] = JsonSerializer.SerializeToElement(value) };
 
-    [GeneratedRegex("^[a-z][a-zA-Z0-9-]{0,39}$")]
+    [GeneratedRegex("^[a-z][a-z0-9-]{0,39}$")]
     private static partial Regex IdRe();
 }

@@ -15,8 +15,9 @@ namespace DeskPanel.Agent.Api;
 public sealed record HelloResponse(string App, int Api, string Version, string RunId, string? Proof = null);
 
 /// <summary>Body of <c>GET /api/v1/state</c> and of each stream message. Sections are null when unchanged (stream) or unknown.</summary>
+/// <param name="LayoutVersion">changes when layout.json changes, so the phone reloads its layout at once</param>
 public sealed record StateMessage(string RunId, long Version, long Ts, bool Full,
-    MetricsSnapshot? Metrics, MediaSnapshot? Media, VolumeSnapshot? Volume);
+    MetricsSnapshot? Metrics, MediaSnapshot? Media, VolumeSnapshot? Volume, string? LayoutVersion = null);
 
 public sealed record LayoutResponse(int SchemaVersion, IReadOnlyList<WidgetConfig> Widgets, IReadOnlyList<Control.PublicAction> Actions);
 
@@ -33,11 +34,11 @@ public static partial class Endpoints
 
         v1.MapGet("/hello", Hello).WithTrust(TrustClass.Public);
 
-        v1.MapGet("/state", (StateHub hub, AgentRun run) =>
+        v1.MapGet("/state", (StateHub hub, AgentRun run, LayoutStore layout) =>
         {
             hub.Touch();
             var s = hub.Current;
-            return new StateMessage(run.RunId, s.Version, s.Ts, true, s.Metrics, s.Media, s.Volume);
+            return new StateMessage(run.RunId, s.Version, s.Ts, true, s.Metrics, s.Media, s.Volume, layout.Version);
         }).WithTrust(TrustClass.Device);
 
         v1.MapGet("/stream", Stream).WithTrust(TrustClass.Device);
@@ -66,7 +67,7 @@ public static partial class Endpoints
     /// that changed since the last message on this connection, plus a full state every 10 s (also a keep-alive).
     /// A new runId tells the phone the agent restarted.
     /// </summary>
-    private static async Task Stream(HttpContext ctx, StateHub hub, AgentRun run)
+    private static async Task Stream(HttpContext ctx, StateHub hub, AgentRun run, LayoutStore layout)
     {
         var ct = ctx.RequestAborted;
         ctx.Response.ContentType = "text/event-stream";
@@ -86,7 +87,8 @@ public static partial class Endpoints
                 var msg = new StateMessage(run.RunId, s.Version, s.Ts, full,
                     full || m != lastMetrics ? s.Metrics : null,
                     full || md != lastMedia ? s.Media : null,
-                    full || v != lastVolume ? s.Volume : null);
+                    full || v != lastVolume ? s.Volume : null,
+                    layout.Version);
                 // a section that became null (nothing playing) must still reach the phone: send a full message then
                 if (!full && ((md != lastMedia && s.Media is null) || (m != lastMetrics && s.Metrics is null) || (v != lastVolume && s.Volume is null)))
                     msg = msg with { Full = true, Metrics = s.Metrics, Media = s.Media, Volume = s.Volume };

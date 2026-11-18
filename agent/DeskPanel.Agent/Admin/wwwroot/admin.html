@@ -12,6 +12,7 @@
     <h1>DeskPanel</h1>
     <nav>
       <button data-tab="devices" class="active">Phones</button>
+      <button data-tab="layout">Layout</button>
       <button data-tab="actions">Actions</button>
       <button data-tab="audit">Activity</button>
     </nav>
@@ -22,9 +23,23 @@
       <p class="hint">Phones enrolled over USB. Each permission is off until you turn it on here; reading the dashboard is always allowed.</p>
       <div id="device-list"></div>
     </section>
+    <section id="layout" hidden>
+      <p class="hint">Drag a widget to move it, drag its corner to resize. Widgets can't overlap. The phone picks up a saved layout within seconds.</p>
+      <div class="editor">
+        <aside><h3>Add</h3><div id="palette"></div></aside>
+        <div id="canvas" class="canvas"></div>
+        <aside id="inspector"><p class="hint">Select a widget.</p></aside>
+      </div>
+      <div class="row">
+        <button id="layout-save" class="primary" disabled>Save</button>
+        <button id="layout-revert" disabled>Revert</button>
+        <span id="layout-status" class="hint"></span>
+      </div>
+      <ul id="layout-errors" class="error"></ul>
+    </section>
     <section id="actions" hidden>
       <p class="hint">What a shortcut button may do. The phone only sends the action's id; the app or keys stay on this Mac.
-        Add an action's id to a <code>shortcuts</code> widget's <code>actions</code> option in layout.json to show it.</p>
+        To show an action on the phone, add its id to a <b>Shortcuts</b> widget under Layout.</p>
       <div id="action-list"></div>
       <div class="row">
         <button id="add-app">Add app…</button>

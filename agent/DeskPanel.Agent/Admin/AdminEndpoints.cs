@@ -1,6 +1,7 @@
 using System.Reflection;
 using DeskPanel.Agent.Control;
 using DeskPanel.Agent.Core;
+using DeskPanel.Agent.Layout;
 using DeskPanel.Agent.Security;
 
 namespace DeskPanel.Agent.Admin;
@@ -30,6 +31,8 @@ public sealed class NoAppPicker : IAppPicker
 {
     public Task<string?> PickAsync(CancellationToken ct) => Task.FromResult<string?>(null);
 }
+
+public sealed record LayoutEnvelope(string Version, LayoutDoc Layout);
 
 public sealed record DeviceView(string Id, string Model, string Serial, DateTimeOffset CreatedAt, bool Revoked, IReadOnlyList<string> Permissions);
 public sealed record PermissionsBody(IReadOnlyList<string> Permissions);
@@ -96,6 +99,20 @@ public static class AdminEndpoints
                 : Results.NoContent());
 
         api.MapGet("/audit", (int? limit, AuditLog audit) => audit.Recent(limit ?? 200));
+
+        // layout editor
+        api.MapGet("/catalog", () => Results.Text(Catalog.RawJson, "application/json; charset=utf-8"));
+        api.MapGet("/layout", (LayoutStore layout) => new LayoutEnvelope(layout.Version, layout.Get()));
+        api.MapPut("/layout", (LayoutEnvelope body, LayoutStore layout) =>
+        {
+            var (outcome, errors, version) = layout.Save(body.Layout, body.Version);
+            return outcome switch
+            {
+                SaveOutcome.Saved => Results.Ok(new { version }),
+                SaveOutcome.Conflict => Results.Json(new { error = "changed-elsewhere", version }, statusCode: StatusCodes.Status409Conflict),
+                _ => Results.BadRequest(new { error = "invalid", errors }),
+            };
+        });
     }
 
     private static IResult Page(string name, string type)

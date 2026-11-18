@@ -3,7 +3,7 @@ body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system
 header { display: flex; align-items: center; gap: 24px; padding: 14px 24px; border-bottom: 1px solid #222b36; }
 h1 { font-size: 18px; margin: 0; }
 nav { display: flex; gap: 6px; flex: 1; }
-main { max-width: 900px; margin: 0 auto; padding: 24px; }
+main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 button, input { font: inherit; color: var(--fg); background: #1c2430; border: 1px solid #2a3442; border-radius: 8px; padding: 6px 12px; }
 button { cursor: pointer; }
 button.active, button.primary { background: var(--accent); color: #04211d; border-color: var(--accent); }
@@ -20,3 +20,20 @@ table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #222b36; }
 td.ok { color: var(--accent); } td.denied, td.failed, td.rate-limited { color: var(--danger); }
 code { background: #1c2430; padding: 1px 5px; border-radius: 4px; }
+
+/* layout editor */
+.editor { display: grid; grid-template-columns: 170px 1fr 240px; gap: 16px; align-items: start; }
+aside h3 { margin: 0 0 8px; font-size: 14px; color: var(--muted); }
+#palette button { display: block; width: 100%; text-align: left; margin-bottom: 6px; }
+.canvas { position: relative; display: grid; grid-template-columns: repeat(12, 1fr); grid-template-rows: repeat(6, 1fr);
+  gap: 4px; aspect-ratio: 20 / 9; background: #0f141b; border: 1px dashed #2a3442; border-radius: 12px; padding: 4px; touch-action: none; user-select: none; }
+.wbox { background: var(--card); border: 1px solid #2a3442; border-radius: 8px; padding: 6px 8px; overflow: hidden; cursor: grab; position: relative; font-size: 13px; }
+.wbox.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.wbox .wname { font-weight: 600; } .wbox .wid { color: var(--muted); font-size: 12px; }
+.wbox .rz { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, var(--accent) 50%); border-bottom-right-radius: 8px; }
+#inspector label { display: block; margin: 10px 0 4px; color: var(--muted); font-size: 13px; }
+#inspector input:not([type=checkbox]), #inspector select { width: 100%; box-sizing: border-box; }
+#layout-errors { padding-left: 18px; }
+
+button:disabled { opacity: 0.45; cursor: default; }

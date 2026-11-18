@@ -94,6 +94,143 @@ $('add-keys').addEventListener('click', async () => {
   if (!$('action-errors').textContent) for (const f of ['keys-id', 'keys-label', 'keys-combo']) $(f).value = '';
 });
 
+// ---------------------------------------------------------------- layout editor
+const COLS = 12, ROWS = 6;
+let catalog = [], layout = null, layoutVersion = null, savedJson = '', selected = null;
+
+const defOf = (type) => catalog.find((d) => d.type === type);
+const overlaps = (w, x, y, ww, hh) => layout.widgets.some((o) => o !== w && x < o.x + o.w && o.x < x + ww && y < o.y + o.h && o.y < y + hh);
+
+/** First free spot for a widget, shrinking towards its minimum size if the page is full. */
+function freeSpot(def) {
+  for (let hh = def.h; hh >= def.minH; hh--)
+    for (let ww = def.w; ww >= def.minW; ww--)
+      for (let y = 0; y + hh <= ROWS; y++)
+        for (let x = 0; x + ww <= COLS; x++)
+          if (!overlaps(null, x, y, ww, hh)) return { x, y, w: ww, h: hh };
+  return null;
+}
+
+async function loadLayout() {
+  catalog = await api('/catalog');
+  const env = await api('/layout');
+  layout = env.layout; layoutVersion = env.version; savedJson = JSON.stringify(layout); selected = null;
+  renderPalette(); renderEditor(); setStatus('');
+}
+
+function dirty() { return JSON.stringify(layout) !== savedJson; }
+function setStatus(text) {
+  $('layout-status').textContent = text;
+  $('layout-save').disabled = !dirty();
+  $('layout-revert').disabled = !dirty();
+}
+
+function renderPalette() {
+  $('palette').replaceChildren(...catalog.map((d) => h('button', { title: d.desc, onclick: () => addWidget(d) }, `${d.icon} ${d.name}`)));
+}
+
+function addWidget(def) {
+  const spot = freeSpot(def);
+  if (!spot) { setStatus('No free space for that widget.'); return; }
+  let id = def.type, n = 2;
+  while (layout.widgets.some((w) => w.id === id)) id = `${def.type}-${n++}`;
+  const options = Object.fromEntries(def.options.map((o) => [o.key, o.default]));
+  const w = { id, type: def.type, ...spot, options };
+  layout.widgets.push(w); selected = w;
+  renderEditor(); setStatus('');
+}
+
+function renderEditor() {
+  const canvas = $('canvas');
+  canvas.replaceChildren(...layout.widgets.map((w) => {
+    const def = defOf(w.type) || { name: w.type, icon: '?' };
+    const box = h('div', { class: 'wbox' + (w === selected ? ' sel' : '') },
+      h('div', { class: 'wname' }, `${def.icon} ${def.name}`), h('div', { class: 'wid' }, w.id), h('div', { class: 'rz' }));
+    box.style.gridArea = `${w.y + 1} / ${w.x + 1} / span ${w.h} / span ${w.w}`;
+    box.addEventListener('pointerdown', (e) => startDrag(e, w, e.target.classList.contains('rz') ? 'resize' : 'move'));
+    return box;
+  }));
+  renderInspector();
+}
+
+/** Pointer drag in whole cells; a change applies only if it stays on the grid and overlaps nothing. */
+function startDrag(e, w, mode) {
+  e.preventDefault();
+  if (selected !== w) { selected = w; renderEditor(); }
+  const rect = $('canvas').getBoundingClientRect();
+  const cw = rect.width / COLS, ch = rect.height / ROWS, sx = e.clientX, sy = e.clientY, start = { ...w };
+  const def = defOf(w.type);
+  const move = (ev) => {
+    const dx = Math.round((ev.clientX - sx) / cw), dy = Math.round((ev.clientY - sy) / ch);
+    let { x, y, w: ww, h: hh } = start;
+    if (mode === 'move') { x = Math.max(0, Math.min(COLS - ww, x + dx)); y = Math.max(0, Math.min(ROWS - hh, y + dy)); }
+    else { ww = Math.max(def.minW, Math.min(COLS - x, ww + dx)); hh = Math.max(def.minH, Math.min(ROWS - y, hh + dy)); }
+    if ((x !== w.x || y !== w.y || ww !== w.w || hh !== w.h) && !overlaps(w, x, y, ww, hh)) {
+      Object.assign(w, { x, y, w: ww, h: hh });
+      renderEditor(); setStatus('');
+    }
+  };
+  const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+
+function renderInspector() {
+  const box = $('inspector');
+  if (!selected) { box.replaceChildren(h('p', { class: 'hint' }, 'Select a widget.')); return; }
+  const w = selected, def = defOf(w.type);
+  w.options = w.options || {};
+  const field = (o) => {
+    const value = w.options[o.key] ?? o.default;
+    const set = (v) => { w.options[o.key] = v; setStatus(''); };
+    let input;
+    if (o.type === 'bool') input = h('input', { type: 'checkbox', checked: !!value, onchange: (e) => set(e.target.checked) });
+    else if (o.type === 'number') input = h('input', { type: 'number', min: o.min, max: o.max, value, onchange: (e) => set(Number(e.target.value)) });
+    else if (o.type === 'select') {
+      input = h('select', { onchange: (e) => set(e.target.value) }, ...o.choices.map((c) => h('option', { value: c, selected: c === value }, c)));
+    } else input = h('input', { value, maxlength: o.maxLength || 200, placeholder: o.type === 'idlist' ? 'e.g. google-chrome, spotlight' : '', onchange: (e) => set(e.target.value) });
+    return [h('label', {}, o.label), input];
+  };
+  box.replaceChildren(
+    h('h3', {}, `${def.icon} ${def.name}`), h('p', { class: 'hint' }, def.desc),
+    h('label', {}, 'Id'), h('input', { value: w.id, maxlength: 40, onchange: (e) => { w.id = e.target.value.trim(); renderEditor(); setStatus(''); } }),
+    ...def.options.flatMap(field),
+    h('div', { class: 'row' }, h('button', { class: 'danger', onclick: () => {
+      layout.widgets = layout.widgets.filter((x) => x !== w); selected = null; renderEditor(); setStatus('');
+    } }, 'Remove')));
+}
+
+$('layout-save').addEventListener('click', async () => {
+  $('layout-errors').replaceChildren();
+  const res = await fetch('/admin/api/layout', {
+    method: 'PUT', credentials: 'same-origin',
+    headers: { 'X-DeskPanel-Admin': '1', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ version: layoutVersion, layout }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (res.ok) { layoutVersion = body.version; savedJson = JSON.stringify(layout); setStatus('Saved. The phone updates within seconds.'); return; }
+  if (res.status === 409) {
+    setStatus('The layout was changed elsewhere since you opened it. Revert to load the latest, then redo your change.');
+    $('layout-revert').disabled = false;
+    return;
+  }
+  // 400: show every problem with where it is (e.g. widgets[2].options.focusMin)
+  $('layout-errors').replaceChildren(...(body.errors || [{ path: '', message: `HTTP ${res.status}` }])
+    .map((e) => h('li', {}, `${describe(e.path)}: ${e.message}`)));
+  setStatus('Not saved.');
+});
+
+/** "widgets[2].options.focusMin" → "Pomodoro 'timer' › focusMin" */
+function describe(path) {
+  const m = /^widgets\[(\d+)\]\.?(.*)$/.exec(path);
+  if (!m) return path;
+  const w = layout.widgets[Number(m[1])];
+  const name = w ? `${defOf(w.type)?.name ?? w.type} '${w.id}'` : `widget ${m[1]}`;
+  return m[2] ? `${name} › ${m[2].replace(/^options\./, '')}` : name;
+}
+
+$('layout-revert').addEventListener('click', () => { $('layout-errors').replaceChildren(); loadLayout().catch(console.error); });
+
 // ---------------------------------------------------------------- activity
 async function loadAudit() {
   const rows = await api('/audit?limit=200');
@@ -103,7 +240,7 @@ async function loadAudit() {
 }
 
 // ---------------------------------------------------------------- tabs
-const loaders = { devices: loadDevices, actions: loadActions, audit: loadAudit };
+const loaders = { devices: loadDevices, layout: loadLayout, actions: loadActions, audit: loadAudit };
 for (const b of document.querySelectorAll('nav button')) {
   b.addEventListener('click', () => {
     for (const o of document.querySelectorAll('nav button')) o.classList.toggle('active', o === b);
