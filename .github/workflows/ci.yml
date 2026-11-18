@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
+        os: [macos-latest, ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       # Actions are pinned to commit SHAs (the tag in the comment is for humans).
@@ -31,6 +31,11 @@ jobs:
         run: dotnet build DeskPanel.slnx -c Release --nologo
       - name: Test (includes the route-classification test)
         run: dotnet test DeskPanel.slnx -c Release --no-build --nologo
+      - name: Smoke test the built agent on this OS (real CPU/memory on Windows and macOS)
+        shell: bash
+        run: |
+          if command -v python >/dev/null 2>&1 && python --version >/dev/null 2>&1; then PY=python; else PY=python3; fi
+          $PY tools/smoke.py
 
   panel:
     runs-on: ubuntu-latest

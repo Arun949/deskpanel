@@ -16,7 +16,7 @@ public sealed class ControlTests : IDisposable
 
     public ControlTests()
     {
-        _app = Directory.CreateDirectory(Path.Combine(_host.Home, "Apps", "Fake.app")).FullName;
+        _app = TestApps.Create(Path.Combine(_host.Home, "Apps"), "Fake");
         _ = _host.Services;
         _host.Actions.Replace([
             new ActionDef("open-fake", "Fake", "launch", _app),
@@ -280,20 +280,47 @@ public sealed class KeySpecAndActionTests
     public void AnythingElseIsRejected(string spec) => Assert.Null(KeySpec.Parse(spec));
 
     [Fact]
-    public void LaunchTargetsMustBeExistingAppBundles()
+    public void LaunchTargetsAreCheckedPerPlatform()
     {
         var dir = Directory.CreateTempSubdirectory("dp-apps-").FullName;
-        var app = Directory.CreateDirectory(Path.Combine(dir, "Real.app")).FullName;
         try
         {
-            Assert.Null(ActionStore.Validate(new ActionDef("ok", "OK", "launch", app)));
-            Assert.NotNull(ActionStore.Validate(new ActionDef("rel", "Rel", "launch", "Real.app")));
-            Assert.NotNull(ActionStore.Validate(new ActionDef("missing", "Missing", "launch", Path.Combine(dir, "Nope.app"))));
-            Assert.NotNull(ActionStore.Validate(new ActionDef("bin", "Bin", "launch", "/bin/sh")));
-            Assert.NotNull(ActionStore.Validate(new ActionDef("dots", "Dots", "launch", app + "/../Real.app")));
+            var bundle = Directory.CreateDirectory(Path.Combine(dir, "Real.app")).FullName;
+            var exe = Path.Combine(dir, "Real.exe");
+            File.WriteAllBytes(exe, []);
+            // macOS: an existing .app bundle, nothing else
+            Assert.True(ActionStore.IsLaunchTarget(bundle, windows: false));
+            Assert.False(ActionStore.IsLaunchTarget(exe, windows: false));
+            Assert.False(ActionStore.IsLaunchTarget("/bin/sh", windows: false));
+            // Windows: an existing .exe, nothing else (no .bat/.cmd/.ps1, no folders)
+            Assert.True(ActionStore.IsLaunchTarget(exe, windows: true));
+            Assert.False(ActionStore.IsLaunchTarget(bundle, windows: true));
+            var bat = Path.Combine(dir, "run.bat");
+            File.WriteAllBytes(bat, []);
+            Assert.False(ActionStore.IsLaunchTarget(bat, windows: true));
+            // both: absolute, existing, no ".."
+            foreach (var windows in new[] { false, true })
+            {
+                Assert.False(ActionStore.IsLaunchTarget(windows ? "Real.exe" : "Real.app", windows));
+                Assert.False(ActionStore.IsLaunchTarget(Path.Combine(dir, windows ? "Nope.exe" : "Nope.app"), windows));
+                Assert.False(ActionStore.IsLaunchTarget(Path.Combine(dir, "x", "..", windows ? "Real.exe" : "Real.app"), windows));
+            }
             Assert.NotNull(ActionStore.Validate(new ActionDef("cmd", "Cmd", "shell", "rm -rf ~")));
             Assert.NotNull(ActionStore.Validate(new ActionDef("Bad Id", "x", "keys", "cmd+a")));
         }
         finally { Directory.Delete(dir, true); }
+    }
+}
+
+/// <summary>A launch target that is valid on the OS running the tests: an .exe file on Windows, an .app folder elsewhere.</summary>
+internal static class TestApps
+{
+    public static string Create(string dir, string name)
+    {
+        Directory.CreateDirectory(dir);
+        if (!OperatingSystem.IsWindows()) return Directory.CreateDirectory(Path.Combine(dir, name + ".app")).FullName;
+        var exe = Path.Combine(dir, name + ".exe");
+        File.WriteAllBytes(exe, []);
+        return exe;
     }
 }

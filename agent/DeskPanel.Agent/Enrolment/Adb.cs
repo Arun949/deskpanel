@@ -18,12 +18,23 @@ public sealed partial class Adb(IToolRunner tools, string? adbPath = null)
         var candidates = (Environment.GetEnvironmentVariable("PATH") ?? "")
             .Split(System.IO.Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
             .Select(d => System.IO.Path.Combine(d, OperatingSystem.IsWindows() ? "adb.exe" : "adb"))
-            .Concat([
+            .Concat(OperatingSystem.IsWindows() ? WindowsCandidates() : [
                 "/opt/homebrew/bin/adb",
                 "/usr/local/bin/adb",
                 System.IO.Path.Combine(home, "Library", "Android", "sdk", "platform-tools", "adb"),
             ]);
         return candidates.FirstOrDefault(File.Exists);
+    }
+
+    /// <summary>Android Studio's SDK and the WinGet package (Google.PlatformTools) on Windows.</summary>
+    private static IEnumerable<string> WindowsCandidates()
+    {
+        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        yield return System.IO.Path.Combine(local, "Android", "Sdk", "platform-tools", "adb.exe");
+        var winget = System.IO.Path.Combine(local, "Microsoft", "WinGet", "Packages");
+        if (!Directory.Exists(winget)) yield break;
+        foreach (var dir in Directory.EnumerateDirectories(winget, "Google.PlatformTools*"))
+            yield return System.IO.Path.Combine(dir, "platform-tools", "adb.exe");
     }
 
     public async Task<IReadOnlyList<string>> DevicesAsync(CancellationToken ct) =>
