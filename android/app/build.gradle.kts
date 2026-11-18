@@ -15,8 +15,23 @@ android {
         versionName = "0.0.1"
     }
 
+    // Release signing only when the release workflow provides a keystore (decoded from a GitHub secret into a
+    // temporary file). Without it a release build is unsigned and can't be installed, so nothing ships by accident.
+    val releaseKeystore = System.getenv("DESKPANEL_KEYSTORE")
+    signingConfigs {
+        if (releaseKeystore != null) create("release") {
+            storeFile = file(releaseKeystore)
+            storePassword = System.getenv("DESKPANEL_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("DESKPANEL_KEY_ALIAS")
+            keyPassword = System.getenv("DESKPANEL_KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
-        release { isMinifyEnabled = false }
+        release {
+            isMinifyEnabled = false
+            if (releaseKeystore != null) signingConfig = signingConfigs.getByName("release")
+        }
     }
 
     buildFeatures { buildConfig = true }

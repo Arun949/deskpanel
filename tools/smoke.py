@@ -13,11 +13,17 @@ PORT = 8799
 BASE = f"http://127.0.0.1:{PORT}"
 
 
-def find_dll():
+def agent_command():
+    """`--exe PATH` tests a packaged (self-contained) agent; otherwise the Release build's DLL runs under `dotnet`."""
+    if "--exe" in sys.argv:
+        exe = os.path.abspath(sys.argv[sys.argv.index("--exe") + 1])
+        if not os.path.isfile(exe):
+            sys.exit(f"{exe} not found")
+        return [exe]
     hits = sorted(glob.glob("agent/DeskPanel.Agent/bin/Release/*/DeskPanelAgent.dll"))
     if not hits:
         sys.exit("DeskPanelAgent.dll not found: build first (dotnet build -c Release)")
-    return hits[-1]
+    return ["dotnet", hits[-1]]
 
 
 def make_device(home):
@@ -40,11 +46,11 @@ def get(path, headers=None):
 
 
 def main():
-    dll = find_dll()
+    command = agent_command()
     home = tempfile.mkdtemp(prefix="deskpanel-smoke-")
     auth = make_device(home)
     env = dict(os.environ, DESKPANEL_HOME=home, DOTNET_CLI_TELEMETRY_OPTOUT="1")
-    agent = subprocess.Popen(["dotnet", dll, "--port", str(PORT)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    agent = subprocess.Popen([*command, "--port", str(PORT)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     failures = []
     try:
         for _ in range(60):
