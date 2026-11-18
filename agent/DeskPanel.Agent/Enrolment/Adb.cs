@@ -35,11 +35,30 @@ public sealed partial class Adb(IToolRunner tools, string? adbPath = null)
     public async Task<bool> AppInstalledAsync(string serial, CancellationToken ct) =>
         (await RunAsync(["-s", Serial(serial), "shell", "pm", "path", Package], ct)).Output.Contains("package:", StringComparison.Ordinal);
 
-    /// <summary>The device id the app holds a key for, or null (asks the app's enrolment provider).</summary>
-    public async Task<string?> EnrolledIdAsync(string serial, CancellationToken ct)
+    /// <summary>What the app's enrolment provider says about its key.</summary>
+    public enum KeyStatus { Unknown, NotEnrolled, Enrolled }
+
+    /// <summary>
+    /// Asks the app which device id it holds a key for. <see cref="KeyStatus.Unknown"/> when the app didn't answer
+    /// (starting up, busy, provider unreachable): that must never be taken as "no key", or a hiccup would revoke a working
+    /// enrolment and prompt again.
+    /// </summary>
+    public async Task<(KeyStatus Status, string? Id)> EnrolledIdAsync(string serial, CancellationToken ct)
     {
         var r = await RunAsync(["-s", Serial(serial), "shell", "content", "call", "--uri", $"content://{EnrolAuthority}", "--method", "status"], ct);
-        return ParseBundle(r.Output).GetValueOrDefault("id") is { } id && DeviceIdRe().IsMatch(id) ? id : null;
+        return ParseStatus(r);
+    }
+
+    public static (KeyStatus Status, string? Id) ParseStatus(ToolResult r)
+    {
+        if (r.ExitCode != 0) return (KeyStatus.Unknown, null);
+        var bundle = ParseBundle(r.Output);
+        return bundle.GetValueOrDefault("enrolled") switch
+        {
+            "false" => (KeyStatus.NotEnrolled, null),
+            "true" when bundle.GetValueOrDefault("id") is { } id && DeviceIdRe().IsMatch(id) => (KeyStatus.Enrolled, id),
+            _ => (KeyStatus.Unknown, null),
+        };
     }
 
     /// <summary>

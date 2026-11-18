@@ -15,7 +15,8 @@ public sealed record LayoutDoc(int SchemaVersion, IReadOnlyList<WidgetConfig> Wi
 public sealed partial class LayoutStore(AgentPaths paths)
 {
     public const int Cols = 12, Rows = 6, MaxWidgets = 30;
-    public static readonly IReadOnlySet<string> Types = new HashSet<string>(StringComparer.Ordinal) { "clock", "pomodoro", "stat", "now-playing" };
+    public static readonly IReadOnlySet<string> Types = new HashSet<string>(StringComparer.Ordinal)
+        { "clock", "pomodoro", "stat", "now-playing", "media-controls", "volume", "shortcuts" };
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private readonly Lock _lock = new();
     private (DateTime Stamp, LayoutDoc Doc)? _cache;
@@ -35,14 +36,28 @@ public sealed partial class LayoutStore(AgentPaths paths)
         }
     }
 
+    /// <summary>Whether the current layout shows a widget of this type (controls are only callable when one is shown).</summary>
+    public bool Has(string type) => Get().Widgets.Any(w => w.Type == type);
+
+    /// <summary>Action ids listed by shortcuts widgets ("actions": "vscode,screenshot").</summary>
+    public IReadOnlySet<string> ReferencedActions() => ActionIds(Get());
+
+    public static IReadOnlySet<string> ActionIds(LayoutDoc doc) => doc.Widgets
+        .Where(w => w.Type == "shortcuts" && w.Options is not null && w.Options.TryGetValue("actions", out var v) && v.ValueKind == JsonValueKind.String)
+        .SelectMany(w => w.Options!["actions"].GetString()!.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        .ToHashSet(StringComparer.Ordinal);
+
     public static readonly LayoutDoc Default = new(1,
     [
-        new("clock", "clock", 0, 0, 4, 3, null),
-        new("now-playing", "now-playing", 4, 0, 5, 3, null),
+        new("clock", "clock", 0, 0, 4, 2, null),
+        new("now-playing", "now-playing", 4, 0, 5, 2, null),
         new("pomodoro", "pomodoro", 9, 0, 3, 3, null),
-        new("cpu", "stat", 0, 3, 4, 3, Opt("metric", "cpu")),
-        new("ram", "stat", 4, 3, 4, 3, Opt("metric", "ram")),
-        new("net", "stat", 8, 3, 4, 3, Opt("metric", "net")),
+        new("volume", "volume", 0, 2, 4, 1, null),
+        new("media-controls", "media-controls", 4, 2, 5, 1, null),
+        new("cpu", "stat", 0, 3, 3, 3, Opt("metric", "cpu")),
+        new("ram", "stat", 3, 3, 3, 3, Opt("metric", "ram")),
+        new("net", "stat", 6, 3, 3, 3, Opt("metric", "net")),
+        new("shortcuts", "shortcuts", 9, 3, 3, 3, Opt("actions", "")),
     ]);
 
     /// <summary>Known types only, unique slug ids, inside the grid, options limited to short strings, numbers and booleans.</summary>

@@ -49,7 +49,8 @@ public sealed partial class AdbEnroller(
             if (!await adb.AppInstalledAsync(serial, ct)) continue;
 
             var device = store.ActiveForSerial(serial);
-            var appId = await adb.EnrolledIdAsync(serial, ct);
+            var (status, appId) = await adb.EnrolledIdAsync(serial, ct);
+            if (status == Adb.KeyStatus.Unknown) { LogNoAnswer(log, serial); continue; } // ask again next round
             if (device is null || appId != device.Id)
             {
                 // new phone, or the app lost its key (reinstalled, data cleared): enrol again, with consent
@@ -78,6 +79,8 @@ public sealed partial class AdbEnroller(
         }
     }
 
+    [LoggerMessage(Level = LogLevel.Debug, Message = "The app on {Serial} didn't answer the key check; trying again")]
+    private static partial void LogNoAnswer(ILogger logger, string serial);
     [LoggerMessage(Level = LogLevel.Warning, Message = "adb not found: install Android platform tools to connect a phone over USB")]
     private static partial void LogNoAdb(ILogger logger);
     [LoggerMessage(Level = LogLevel.Warning, Message = "USB round failed: {Message}")]

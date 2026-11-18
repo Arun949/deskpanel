@@ -3,7 +3,8 @@ using System.Text;
 
 namespace DeskPanel.Agent.Core;
 
-public sealed record ToolResult(int ExitCode, string Output);
+/// <param name="Error">stderr, for diagnosing failures (never shown to the phone)</param>
+public sealed record ToolResult(int ExitCode, string Output, string Error = "");
 
 /// <summary>Runs a helper program: no shell, arguments as a list, a timeout that kills the whole tree.</summary>
 public interface IToolRunner
@@ -38,7 +39,7 @@ public sealed class ToolRunner(AgentPaths paths) : IToolRunner
             return new ToolResult(-1, $"{Path.GetFileName(file)} timed out");
         }
         var output = await stdout;
-        await stderr; // drained so the process never blocks on a full pipe
-        return new ToolResult(p.ExitCode, output);
+        var error = await stderr; // always drained, so the process never blocks on a full pipe
+        return new ToolResult(p.ExitCode, output, error.Length > 2000 ? error[..2000] : error);
     }
 }

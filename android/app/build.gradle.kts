@@ -33,7 +33,7 @@ android {
 
 val panelDist = rootProject.file("../panel/dist")
 
-val copyPanel by tasks.registering(Copy::class) {
+val copyPanel by tasks.registering(Sync::class) { // Sync, not Copy: stale bundles from earlier builds are removed
     description = "Copies the built panel into the APK's assets."
     doFirst {
         check(panelDist.resolve("index.html").exists()) {

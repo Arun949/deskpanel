@@ -2,6 +2,7 @@ import './widgets/clock';
 import './widgets/nowPlaying';
 import './widgets/pomodoro';
 import './widgets/stat';
+import { setActions } from './widgets/controls';
 import { h } from './dom';
 import { age } from './format';
 import { Page } from './layout';
@@ -49,13 +50,26 @@ async function poll(): Promise<void> {
   setTimeout(poll, 2000);
 }
 
+let layoutJson = '';
+
+/**
+ * Loads the layout, and checks it again every 30 s: a change made on the computer (layout.json, actions) shows up
+ * without restarting the app. Widgets are re-created only when something actually changed.
+ */
 async function loadLayout(): Promise<void> {
+  let next = 30_000;
   try {
     const doc = await getJson<LayoutDoc>('/layout');
-    if (doc.widgets.length > 0) page.mount(doc.widgets);
+    const json = JSON.stringify(doc);
+    if (json !== layoutJson && doc.widgets.length > 0) {
+      layoutJson = json;
+      setActions(doc.actions ?? []);
+      page.mount(doc.widgets);
+    }
   } catch {
-    setTimeout(loadLayout, 5000); // keep the fallback page and try again
+    if (!layoutJson) next = 5000; // still on the fallback page: try again soon
   }
+  setTimeout(loadLayout, next);
 }
 
 /** Offline / stale badge with the age of the data (PhoneBox showed no data age, Module 10). */

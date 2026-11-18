@@ -1,6 +1,6 @@
 # DeskPanel threat model
 
-Status: **M1 built and unit-tested** (agent, panel, Android app); end-to-end test with a real phone pending. Update this file in the same pull request as any change that adds a route, a file read, an outbound connection, a stored secret, or a control action.
+Status: **M2** (safe controls) on branch `m2/safe-controls`: verified on a LAVA LXX504, including permission refusal and volume control. Update this file in the same pull request as any change that adds a route, a file read, an outbound connection, a stored secret, or a control action.
 
 ## Assets
 | Asset | Where |
@@ -27,13 +27,16 @@ Status: **M1 built and unit-tested** (agent, panel, Android app); end-to-end tes
 | T4 | Public route leaks data or changes state | Public routes are GET-only and return identity only | `PublicRoutesAreReadOnly`, `HelloIsPublic…` | **M0 done** |
 | T5 | Another phone app listens on 127.0.0.1:8765 and impersonates the agent (M3) | App checks HMAC(deviceKey, nonce, runId) from `/hello` before any Device request | `HelloProvesTheAgentKnowsTheDeviceKey`, `TheProofMatchesTheSharedVector` (C#), `ProofTest` (Kotlin, same vector) | **M1 done** (on-device check pending) |
 | T6 | Key stolen from the phone or reused by another device (M4) | Per-device key, Keystore-wrapped; hashed on the PC; revocable | `DeviceAuthTests`, `AdbEnrollerTests`, `DevicesFileIsOwnerOnly` | **M1 done**: PC asks in a Mac dialog; key stored on PC only as derived hashes (owner-only); phone keeps it Keystore-wrapped, backups off; only adb shell (uid 2000 + DUMP) can deliver it. Revocation UI: M2 |
-| T7 | Admin routes reached by the phone, or the phone's key used on admin routes (M1, M11) | Separate `Admin` class with a session cookie from a one-time link; Device keys never valid on `/admin` | Cross-class tests | M2 |
-| T8 | Arbitrary command execution (M7) | No route accepts a command, path or arguments from the phone; actions run by ID from `actions.json`; launch targets are chosen in a file dialog | Action tests | M2 |
+| T7 | Admin routes reached by the phone, or the phone's key used on admin routes (M1, M11) | Separate `Admin` class with a session cookie from a one-time link; Device keys never valid on `/admin` | `AdminTests.ADeviceKeyNeverOpensAdminRoutes`, `ControlTests.ControlsNeedADeviceKey`, one-time link tests | **M2 done**: admin = one-time link from an owner-only file → HttpOnly SameSite=Strict cookie (Path=/admin) + `X-DeskPanel-Admin` header + CSP |
+| T8 | Arbitrary command execution (M7) | No route accepts a command, path or arguments from the phone; actions run by ID from `actions.json`; launch targets are chosen in a file dialog | `ControlTests`, `KeySpecAndActionTests`, Android `ProxyRulesTest` | **M2 done**: actions are `launch` (an existing `.app` picked in a macOS dialog, opened with no arguments) or `keys` (fixed key table); unknown → 404, not on layout → 403, no grant → 403 |
 | T9 | Secrets leak to the phone or logs (M2) | Separate files; secrets in the OS keychain; secret canary test | `TheDeviceKeyNeverLeaves` | **M1 done** for device keys |
-| T10 | Abuse by flooding actions (M7) | Token bucket per device; audit log | Rate-limit and audit tests | M2 |
+| T10 | Abuse by flooding actions (M7) | Token bucket per device; audit log | `KeyPressesAreRateLimited`, audit assertions in `ControlTests` | **M2 done**: token bucket per device and permission (keys: 3 burst, 1/s); `audit.jsonl` owner-only, no targets or text |
 | T11 | Malicious update (M12) | Manual updates in the MVP; later signature check against a built-in key, no downgrade | Release tests | M4+ |
 | T12 | Media artwork used to read files (M8) | Artwork bytes only from the media API, size cap, image-signature check | — | **M1: not exposed** (no artwork route yet; track text is length-capped) |
 | T13 | Injected markup in the panel (M10) | `h()` builds text nodes only; CSP `script-src 'self'` | `h() never turns text into markup` | **M0 done** |
+
+| T14 | A hiccup on the phone revokes a working enrolment (found on the real phone in M2) | Only an explicit `enrolled=false` from the app triggers re-enrolment; no answer = try again | `AnAppThatDoesNotAnswerKeepsItsEnrolment`, `StatusAnswersAreReadStrictly` | **M2 done** |
+| T15 | A tap retried after a network error runs twice | `Idempotency-Key` per tap (agent remembers 2 min); app never retries a POST | `ARetriedRequestWithTheSameIdempotencyKeyRunsOnce`, panel `controls.test.ts` | **M2 done** |
 
 ## Explicit non-goals (MVP)
 - Defending against malware already running as the same user on the PC (it can read the agent's files anyway).

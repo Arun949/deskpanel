@@ -10,7 +10,46 @@ export const API = '/agent/api/v1';
 /** Marks requests from the panel itself; the native proxy refuses /agent/* without it (no sandboxed frame can add it). */
 export const PANEL_HEADERS = { 'X-DeskPanel-Panel': '1' } as const;
 
-export interface LayoutDoc { schemaVersion: number; widgets: WidgetConfig[] }
+/** What the phone may know about an action: never its target. */
+export interface PublicAction { id: string; label: string; kind: 'launch' | 'keys'; icon: string | null }
+
+export interface LayoutDoc { schemaVersion: number; widgets: WidgetConfig[]; actions?: PublicAction[] }
+
+/** Outcome of a control request, phrased for the person holding the phone. */
+export interface ControlOutcome { ok: boolean; message: string | null }
+
+const MESSAGES: Record<string, string> = {
+  'not-allowed': 'Not allowed yet: turn it on in DeskPanel settings on your computer',
+  'not-on-layout': 'This control isn’t on this phone’s layout',
+  'slow-down': 'Too many taps; wait a moment',
+  'no-player-running': 'Open Spotify or Music on your computer first',
+  'needs-accessibility-permission': 'Allow DeskPanel under Accessibility in macOS settings',
+  'app-missing': 'That app is no longer on your computer',
+  'unsupported-on-this-computer': 'Not supported on this computer',
+  offline: 'Your computer isn’t connected',
+};
+
+function newKey(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Sends a control. Each tap gets its own Idempotency-Key, and a failed request is never retried automatically:
+ * the agent may already have acted on it (PhoneBox's rule, Module 3).
+ */
+export async function control(path: string): Promise<ControlOutcome> {
+  try {
+    const res = await fetch(API + path, { method: 'POST', headers: { ...PANEL_HEADERS, 'Idempotency-Key': newKey() }, cache: 'no-store' });
+    if (res.ok) return { ok: true, message: null };
+    let code = `http-${res.status}`;
+    try { code = ((await res.json()) as { error?: string }).error ?? code; } catch { /* no body */ }
+    return { ok: false, message: MESSAGES[code] ?? `Didn’t work (${code})` };
+  } catch {
+    return { ok: false, message: MESSAGES['offline']! };
+  }
+}
 
 export async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(API + path, { headers: PANEL_HEADERS, cache: 'no-store', signal });

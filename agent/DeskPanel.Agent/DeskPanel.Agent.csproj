@@ -9,6 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Admin/wwwroot/*.*" LogicalName="admin/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="DeskPanel.Agent.Tests" />
   </ItemGroup>
 

@@ -1,5 +1,7 @@
 using System.Net;
+using DeskPanel.Agent.Admin;
 using DeskPanel.Agent.Api;
+using DeskPanel.Agent.Control;
 using DeskPanel.Agent.Core;
 using DeskPanel.Agent.Enrolment;
 using DeskPanel.Agent.Layout;
@@ -34,7 +36,33 @@ s.AddSingleton<IToolRunner, ToolRunner>();
 // security
 s.AddSingleton<DeviceStore>();
 s.AddSingleton<IDeviceAuthenticator, DeviceKeyAuthenticator>();
-s.AddSingleton<IAdminAuthenticator, NoAdminAuthenticator>();   // M2: settings-page session
+s.AddSingleton(TimeProvider.System);
+s.AddSingleton<AdminSessions>();
+s.AddSingleton<IAdminAuthenticator>(sp => sp.GetRequiredService<AdminSessions>());   // settings-page session cookie
+s.AddSingleton<PermissionStore>();
+
+// controls: every request goes through ControlGate (permission, layout, rate limit, idempotency, audit)
+s.AddSingleton<ActionStore>();
+s.AddSingleton<AuditLog>();
+s.AddSingleton<ControlGate>();
+if (OperatingSystem.IsMacOS())
+{
+    s.AddSingleton<MacControls>();
+    s.AddSingleton<IMediaControl>(sp => sp.GetRequiredService<MacControls>());
+    s.AddSingleton<IVolumeControl>(sp => sp.GetRequiredService<MacControls>());
+    s.AddSingleton<IAppLauncher>(sp => sp.GetRequiredService<MacControls>());
+    s.AddSingleton<IKeySender>(sp => sp.GetRequiredService<MacControls>());
+    s.AddSingleton<IAppPicker, MacAppPicker>();
+}
+else
+{
+    var none = new UnsupportedControls();
+    s.AddSingleton<IMediaControl>(none);
+    s.AddSingleton<IVolumeControl>(none);
+    s.AddSingleton<IAppLauncher>(none);
+    s.AddSingleton<IKeySender>(none);
+    s.AddSingleton<IAppPicker, NoAppPicker>();
+}
 
 // USB enrolment (adb is the root of trust)
 s.AddSingleton(sp => new Adb(sp.GetRequiredService<IToolRunner>()));
@@ -69,18 +97,27 @@ app.Use((context, next) =>
     h.XContentTypeOptions = "nosniff";
     h.XFrameOptions = "DENY";
     h["Referrer-Policy"] = "no-referrer";
+    if (context.Request.Path.StartsWithSegments("/admin"))
+        h.ContentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
     return next(context);
 });
 app.UseMiddleware<BrowserGuard>();   // keep browsers out (Host, Origin, Sec-Fetch-Site)
 app.UseRouting();
 app.UseMiddleware<TrustGate>();      // per-route trust class: Public / Device / Admin, fail closed
 app.MapDeskPanel();
+app.MapControls();
+app.MapAdmin();
 
 var run = app.Services.GetRequiredService<AgentRun>();
 var home = app.Services.GetRequiredService<AgentPaths>().Home;
+var adminLink = app.Services.GetRequiredService<AdminSessions>().LinkPath;
 app.Lifetime.ApplicationStarted.Register(() =>
+{
     app.Logger.LogInformation("DeskPanel agent {Version} (run {RunId}) listening on http://127.0.0.1:{Port}; data in {Home}",
-        run.Version, run.RunId, options.Port, home));
+        run.Version, run.RunId, options.Port, home);
+    // the link itself is never logged: logs get shared, the owner-only file does not
+    app.Logger.LogInformation("Settings: open the one-time link in {AdminLink} (tools/admin.sh does it)", adminLink);
+});
 
 app.Run();
 

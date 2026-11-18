@@ -70,6 +70,39 @@ class AgentClient(private val vault: KeyVault) {
         }
     }
 
+    /**
+     * A control request. Sent once: if the connection breaks after the request went out, the result is reported as
+     * unknown instead of retrying, because the computer may already have acted (PhoneBox's rule, Module 3).
+     */
+    fun post(pathAndQuery: String, idempotencyKey: String?): Reply {
+        val e = vault.load() ?: return error(503, "not-enrolled")
+        if (verifiedRunId == null && verify() !is Check.Ok) return error(502, "agent-not-verified")
+        val c = try {
+            open(pathAndQuery, 8000).apply {
+                requestMethod = "POST"
+                setRequestProperty("Authorization", "Device ${e.deviceId}.${e.key}")
+                if (idempotencyKey != null) setRequestProperty("Idempotency-Key", idempotencyKey)
+                doOutput = true
+                setFixedLengthStreamingMode(0)
+            }
+        } catch (ex: Exception) {
+            return error(503, "offline")
+        }
+        return try {
+            c.outputStream.close()
+            val code = c.responseCode
+            if (code == 401) verifiedRunId = null
+            val body = (if (code >= 400) c.errorStream else c.inputStream) ?: ByteArrayInputStream(ByteArray(0))
+            Reply(code, c.contentType, body)
+        } catch (ex: java.net.ConnectException) {
+            verifiedRunId = null
+            error(503, "offline") // never connected: nothing was sent
+        } catch (ex: Exception) {
+            verifiedRunId = null
+            error(504, "result-unknown")
+        }
+    }
+
     private fun open(path: String, timeoutMs: Int): HttpURLConnection =
         (URL(BASE + path).openConnection() as HttpURLConnection).apply {
             instanceFollowRedirects = false

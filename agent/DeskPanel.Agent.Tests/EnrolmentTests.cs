@@ -50,6 +50,7 @@ public sealed class AdbEnrollerTests : IDisposable
     private readonly DeviceStore _store;
     private bool _deliverOk = true;
     private string? _appHasId;
+    private bool _appSilent; // provider unreachable (app restarting)
 
     public AdbEnrollerTests()
     {
@@ -60,6 +61,8 @@ public sealed class AdbEnrollerTests : IDisposable
             if (a == "devices") return new(0, "List of devices attached\nPHONE1\tdevice\n");
             if (a.EndsWith("pm path app.deskpanel", StringComparison.Ordinal)) return new(0, "package:/data/app/base.apk\n");
             if (a.EndsWith("getprop ro.product.model", StringComparison.Ordinal)) return new(0, "Pixel 4a\n");
+            if (a.Contains("--method status", StringComparison.Ordinal) && _appSilent)
+                return new(255, "", "Error while accessing provider:app.deskpanel.enrol");
             if (a.Contains("--method status", StringComparison.Ordinal))
                 return new(0, _appHasId is null ? "Result: Bundle[{enrolled=false}]" : $"Result: Bundle[{{enrolled=true, id={_appHasId}}}]");
             if (a.Contains("--method enrol", StringComparison.Ordinal)) return new(0, $"Result: Bundle[{{ok={(_deliverOk ? "true" : "false")}}}]");
@@ -124,6 +127,29 @@ public sealed class AdbEnrollerTests : IDisposable
             .RoundAsync(CancellationToken.None);
         Assert.Equal(1, prompt.Asked);
     }
+
+    /// <summary>Regression: a status check that fails must not revoke a working key or prompt (seen on a real phone).</summary>
+    [Fact]
+    public async Task AnAppThatDoesNotAnswerKeepsItsEnrolment()
+    {
+        var (device, _) = _store.Enrol("PHONE1", "Pixel 4a");
+        _appSilent = true;
+        var prompt = new FixedPrompt(allow: true);
+        await new AdbEnroller(new Adb(_tools, "/fake/adb"), _store, prompt, new AgentOptions(8765), NullLogger<AdbEnroller>.Instance)
+            .RoundAsync(CancellationToken.None);
+        Assert.Equal(0, prompt.Asked);
+        Assert.False(_store.Active(device.Id) is null);
+        Assert.DoesNotContain(_tools.Calls, c => c.Contains("--method enrol", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(0, "Result: Bundle[{enrolled=false}]", "NotEnrolled")]
+    [InlineData(0, "Result: Bundle[{id=0123456789abcdef, enrolled=true}]", "Enrolled")]
+    [InlineData(255, "", "Unknown")]
+    [InlineData(0, "Error while accessing provider", "Unknown")]
+    [InlineData(0, "Result: Bundle[{enrolled=true}]", "Unknown")]   // claims a key but gives no valid id
+    public void StatusAnswersAreReadStrictly(int exit, string output, string expected) =>
+        Assert.Equal(expected, Adb.ParseStatus(new ToolResult(exit, output)).Status.ToString());
 
     public void Dispose()
     {

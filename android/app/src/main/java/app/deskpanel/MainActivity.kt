@@ -66,12 +66,24 @@ class MainActivity : Activity() {
         }
     }
 
-    /** Only the panel's own requests (header set by its fetch), only GET, only these paths. */
+    /**
+     * Only the panel's own requests (header set by its fetch), and only these exact shapes. Defence in depth: the agent
+     * checks all of this again (PhoneBox's proxy forwarded any path, Module 3).
+     */
     private fun proxy(request: WebResourceRequest): WebResourceResponse {
         val fromPanel = request.requestHeaders.keys.any { it.equals(PANEL_HEADER, ignoreCase = true) }
         val path = request.url.encodedPath!!.removePrefix("/agent")
-        if (!fromPanel || request.method != "GET" || path !in ALLOWED) return FORBIDDEN()
-        val r = client.get(path)
+        val query = request.url.encodedQuery
+        if (!fromPanel) return FORBIDDEN()
+        val r = when (request.method) {
+            "GET" -> if (ProxyRules.allowedGet(path, query)) client.get(path) else return FORBIDDEN()
+            "POST" -> {
+                if (!ProxyRules.allowedPost(path, query)) return FORBIDDEN()
+                val idem = request.requestHeaders.entries.firstOrNull { it.key.equals("Idempotency-Key", true) }?.value
+                client.post(if (query == null) path else "$path?$query", idem?.takeIf { IDEM.matches(it) })
+            }
+            else -> return FORBIDDEN()
+        }
         val type = r.contentType?.substringBefore(';')?.trim() ?: "application/json"
         val code = if (r.code in 200..599 && r.code !in 300..399) r.code else 502
         return WebResourceResponse(type, "utf-8", code, if (code < 400) "OK" else "Error", NO_STORE, r.body)
@@ -115,7 +127,7 @@ class MainActivity : Activity() {
     private companion object {
         const val ASSET_HOST = "appassets.androidplatform.net"
         const val PANEL_HEADER = "X-DeskPanel-Panel"
-        val ALLOWED = setOf("/api/v1/state", "/api/v1/layout") // the stream is opened natively, not by the page
+        val IDEM = ProxyRules.IDEM
         val NO_STORE = mapOf("Cache-Control" to "no-store")
         fun FORBIDDEN() = WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", NO_STORE, ByteArrayInputStream(ByteArray(0)))
     }

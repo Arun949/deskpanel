@@ -18,6 +18,8 @@ public sealed record HelloResponse(string App, int Api, string Version, string R
 public sealed record StateMessage(string RunId, long Version, long Ts, bool Full,
     MetricsSnapshot? Metrics, MediaSnapshot? Media, VolumeSnapshot? Volume);
 
+public sealed record LayoutResponse(int SchemaVersion, IReadOnlyList<WidgetConfig> Widgets, IReadOnlyList<Control.PublicAction> Actions);
+
 public static partial class Endpoints
 {
     public const int ApiVersion = 1;
@@ -40,7 +42,14 @@ public static partial class Endpoints
 
         v1.MapGet("/stream", Stream).WithTrust(TrustClass.Device);
 
-        v1.MapGet("/layout", (LayoutStore layout) => layout.Get()).WithTrust(TrustClass.Device);
+        // the layout plus label/icon/kind of the actions its shortcuts widgets list; never an action's target
+        v1.MapGet("/layout", (LayoutStore layout, Control.ActionStore actions) =>
+        {
+            var doc = layout.Get();
+            var ids = LayoutStore.ActionIds(doc);
+            return new LayoutResponse(doc.SchemaVersion, doc.Widgets,
+                [.. actions.All().Where(a => ids.Contains(a.Id)).Select(a => new Control.PublicAction(a.Id, a.Label, a.Kind, a.Icon))]);
+        }).WithTrust(TrustClass.Device);
     }
 
     private static IResult Hello(string? d, string? n, AgentRun run, DeviceStore devices)
