@@ -7,7 +7,9 @@ using DeskPanel.Agent.Enrolment;
 using DeskPanel.Agent.Layout;
 using DeskPanel.Agent.Security;
 using DeskPanel.Agent.State;
+using DeskPanel.Agent.Control.Windows;
 using DeskPanel.Agent.State.Mac;
+using DeskPanel.Agent.State.Windows;
 
 var options = AgentOptions.From(args, Environment.GetEnvironmentVariable("DESKPANEL_PORT"));
 
@@ -45,44 +47,57 @@ s.AddSingleton<PermissionStore>();
 s.AddSingleton<ActionStore>();
 s.AddSingleton<AuditLog>();
 s.AddSingleton<ControlGate>();
-if (OperatingSystem.IsMacOS())
-{
-    s.AddSingleton<MacControls>();
-    s.AddSingleton<IMediaControl>(sp => sp.GetRequiredService<MacControls>());
-    s.AddSingleton<IVolumeControl>(sp => sp.GetRequiredService<MacControls>());
-    s.AddSingleton<IAppLauncher>(sp => sp.GetRequiredService<MacControls>());
-    s.AddSingleton<IKeySender>(sp => sp.GetRequiredService<MacControls>());
-    s.AddSingleton<IAppPicker, MacAppPicker>();
-}
-else
-{
-    var none = new UnsupportedControls();
-    s.AddSingleton<IMediaControl>(none);
-    s.AddSingleton<IVolumeControl>(none);
-    s.AddSingleton<IAppLauncher>(none);
-    s.AddSingleton<IKeySender>(none);
-    s.AddSingleton<IAppPicker, NoAppPicker>();
-}
-
-// USB enrolment (adb is the root of trust)
 s.AddSingleton(sp => new Adb(sp.GetRequiredService<IToolRunner>()));
-if (OperatingSystem.IsMacOS()) s.AddSingleton<IEnrolPrompt, MacEnrolPrompt>();
-else s.AddSingleton<IEnrolPrompt, DenyEnrolPrompt>();
-s.AddHostedService<AdbEnroller>();
+s.AddHostedService<AdbEnroller>(); // USB enrolment (adb is the root of trust)
 
-// live state
+// Platform adapters. Each platform provides: metrics, media (read + control), volume (read + control), app launch,
+// key presses, the enrolment question and the app picker. Anything missing is "unsupported", never "allowed".
 if (OperatingSystem.IsMacOS())
 {
     s.AddSingleton<ISystemMetrics, MacSystemMetrics>();
     s.AddSingleton<IMediaSource, MacMediaSource>();
     s.AddSingleton<IVolumeSource, MacVolumeSource>();
+    s.AddSingleton<MacControls>();
+    s.AddSingleton<IMediaControl>(sp => sp.GetRequiredService<MacControls>());
+    s.AddSingleton<IVolumeControl>(sp => sp.GetRequiredService<MacControls>());
+    s.AddSingleton<IAppLauncher>(sp => sp.GetRequiredService<MacControls>());
+    s.AddSingleton<IKeySender>(sp => sp.GetRequiredService<MacControls>());
+    s.AddSingleton<IEnrolPrompt, MacEnrolPrompt>();
+    s.AddSingleton<IAppPicker, MacAppPicker>();
+}
+else if (OperatingSystem.IsWindows())
+{
+    s.AddSingleton<ISystemMetrics, WindowsSystemMetrics>();
+    var audio = new WindowsAudio(); // created here, inside the Windows check (the platform analyser follows it)
+    s.AddSingleton<IVolumeSource>(audio);
+    s.AddSingleton<IVolumeControl>(audio);
+#if WINDOWS
+    var media = new WindowsMedia();
+    s.AddSingleton<IMediaSource>(media);
+    s.AddSingleton<IMediaControl>(media);
+#else
+    s.AddSingleton<IMediaSource>(new UnsupportedSources());   // built without the Windows target: no media session
+    s.AddSingleton<IMediaControl>(new UnsupportedControls());
+#endif
+    var controls = new WindowsControls();
+    s.AddSingleton<IAppLauncher>(controls);
+    s.AddSingleton<IKeySender>(controls);
+    s.AddSingleton<IEnrolPrompt, WindowsEnrolPrompt>();
+    s.AddSingleton<IAppPicker, WindowsAppPicker>();
 }
 else
 {
     var unsupported = new UnsupportedSources();
+    var none = new UnsupportedControls();
     s.AddSingleton<ISystemMetrics>(unsupported);
     s.AddSingleton<IMediaSource>(unsupported);
     s.AddSingleton<IVolumeSource>(unsupported);
+    s.AddSingleton<IMediaControl>(none);
+    s.AddSingleton<IVolumeControl>(none);
+    s.AddSingleton<IAppLauncher>(none);
+    s.AddSingleton<IKeySender>(none);
+    s.AddSingleton<IEnrolPrompt, DenyEnrolPrompt>();
+    s.AddSingleton<IAppPicker, NoAppPicker>();
 }
 s.AddSingleton<StateHub>();
 s.AddHostedService(sp => sp.GetRequiredService<StateHub>());

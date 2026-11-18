@@ -70,18 +70,27 @@ public sealed partial class ActionStore
         if (a.Icon is { Length: > 8 }) return $"'{a.Id}': icon is too long";
         return a.Kind switch
         {
-            "launch" => IsAppBundle(a.Target) ? null : $"'{a.Id}': choose an app (an existing .app bundle)",
+            "launch" => IsLaunchTarget(a.Target) ? null
+                : OperatingSystem.IsWindows() ? $"'{a.Id}': choose a program (an existing .exe)" : $"'{a.Id}': choose an app (an existing .app bundle)",
             "keys" => KeySpec.Parse(a.Target ?? "") is null ? $"'{a.Id}': unknown key combination '{a.Target}'" : null,
             _ => $"'{a.Id}': kind must be 'launch' or 'keys'",
         };
     }
 
-    public static bool IsAppBundle(string? path) =>
+    /// <summary>
+    /// What a "launch" action may point at, per platform: an existing <c>.app</c> bundle on macOS, an existing <c>.exe</c> on
+    /// Windows (shortcuts are resolved to their program when picked, so no hidden arguments come along). Always an
+    /// absolute path, never a relative one or one with "..".
+    /// </summary>
+    public static bool IsLaunchTarget(string? path) => IsLaunchTarget(path, OperatingSystem.IsWindows());
+
+    internal static bool IsLaunchTarget(string? path, bool windows) =>
         path is { Length: > 5 and < 1024 }
         && Path.IsPathFullyQualified(path)
-        && path.EndsWith(".app", StringComparison.Ordinal)
         && !path.Contains("..", StringComparison.Ordinal)
-        && Directory.Exists(path);
+        && (windows
+            ? path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && File.Exists(path)
+            : path.EndsWith(".app", StringComparison.Ordinal) && Directory.Exists(path));
 
     private static ActionDef Normalize(ActionDef a) =>
         a with { Label = a.Label.Trim(), Target = a.Kind == "keys" ? KeySpec.Parse(a.Target)!.Canonical : a.Target };

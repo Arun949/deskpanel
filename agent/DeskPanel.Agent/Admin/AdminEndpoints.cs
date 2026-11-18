@@ -23,7 +23,7 @@ public sealed class MacAppPicker(IToolRunner tools) : IAppPicker
     {
         var r = await tools.RunAsync("/usr/bin/osascript", ["-e", Script], TimeSpan.FromMinutes(2), ct);
         var path = r.Output.Trim().TrimEnd('/');
-        return r.ExitCode == 0 && ActionStore.IsAppBundle(path) ? path : null;
+        return r.ExitCode == 0 && ActionStore.IsLaunchTarget(path) ? path : null;
     }
 }
 

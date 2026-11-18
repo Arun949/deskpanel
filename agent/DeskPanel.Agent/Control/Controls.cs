@@ -75,7 +75,7 @@ public sealed class MacControls(IToolRunner tools) : IMediaControl, IVolumeContr
 
     public async Task<ControlResult> LaunchAsync(string appPath, CancellationToken ct)
     {
-        if (!ActionStore.IsAppBundle(appPath)) return new(false, "app-missing");
+        if (!ActionStore.IsLaunchTarget(appPath)) return new(false, "app-missing");
         return Ok(await tools.RunAsync("/usr/bin/open", ["-a", appPath], Timeout, ct));
     }
 
