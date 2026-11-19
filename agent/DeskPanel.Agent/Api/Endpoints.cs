@@ -25,6 +25,9 @@ public static partial class Endpoints
 {
     public const int ApiVersion = 1;
     internal static readonly TimeSpan FullStateEvery = TimeSpan.FromSeconds(10);
+
+    /// <summary>How often an open stream re-checks that its phone is still allowed (revoked → the stream ends).</summary>
+    internal static readonly TimeSpan AccessCheckEvery = TimeSpan.FromSeconds(2);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     /// <summary>Maps every route. Each one declares a <see cref="TrustClass"/>; see TrustGate.</summary>
@@ -67,9 +70,10 @@ public static partial class Endpoints
     /// that changed since the last message on this connection, plus a full state every 10 s (also a keep-alive).
     /// A new runId tells the phone the agent restarted.
     /// </summary>
-    private static async Task Stream(HttpContext ctx, StateHub hub, AgentRun run, LayoutStore layout)
+    private static async Task Stream(HttpContext ctx, StateHub hub, AgentRun run, LayoutStore layout, DeviceStore devices)
     {
         var ct = ctx.RequestAborted;
+        var deviceId = (string)ctx.Items[TrustGate.DeviceIdItem]!; // set by TrustGate: this is a Device route
         ctx.Response.ContentType = "text/event-stream";
         ctx.Response.Headers["X-Accel-Buffering"] = "no";
         string? lastMetrics = null, lastMedia = null, lastVolume = null;
@@ -80,8 +84,11 @@ public static partial class Endpoints
             while (!ct.IsCancellationRequested)
             {
                 hub.Touch();
-                var s = await hub.WaitForChangeAsync(version, FullStateEvery, ct);
+                // wake at least every AccessCheckEvery, so a revoked phone loses its open stream within seconds
+                var s = await hub.WaitForChangeAsync(version, AccessCheckEvery, ct);
+                if (devices.Active(deviceId) is null) return;
                 var full = lastFull is not { } at || Environment.TickCount64 - at >= FullStateEvery.TotalMilliseconds;
+                if (!full && s.Version == version) continue; // woke only to check access: nothing new to send
                 string Ser<T>(T v) => JsonSerializer.Serialize(v, Json);
                 var (m, md, v) = (Ser(s.Metrics), Ser(s.Media), Ser(s.Volume));
                 var msg = new StateMessage(run.RunId, s.Version, s.Ts, full,

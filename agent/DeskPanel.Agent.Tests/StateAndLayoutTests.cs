@@ -33,6 +33,21 @@ public sealed class StateAndLayoutTests(TestHost host) : IClassFixture<TestHost>
     }
 
     [Fact]
+    public async Task RevokingAPhoneEndsItsOpenStream()
+    {
+        var (client, device, _) = host.Enrolled("REVOKE-STREAM");
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        using var res = await client.GetAsync("/api/v1/stream", HttpCompletionOption.ResponseHeadersRead, cts.Token);
+        using var reader = new StreamReader(await res.Content.ReadAsStreamAsync(cts.Token));
+        Assert.StartsWith("id: ", await reader.ReadLineAsync(cts.Token)); // the stream is open and sending
+
+        var revokedAt = System.Diagnostics.Stopwatch.StartNew();
+        host.Devices.Revoke(device.Id);
+        while (await reader.ReadLineAsync(cts.Token) is not null) { } // drain until the agent closes the stream
+        Assert.True(revokedAt.Elapsed < Endpoints.FullStateEvery, $"stream ended after {revokedAt.Elapsed}");
+    }
+
+    [Fact]
     public async Task TheStreamRequiresADeviceKey() =>
         Assert.Equal(HttpStatusCode.Unauthorized, (await host.Client().GetAsync("/api/v1/stream")).StatusCode);
 
