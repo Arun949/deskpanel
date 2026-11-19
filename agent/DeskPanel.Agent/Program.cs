@@ -11,9 +11,19 @@ using DeskPanel.Agent.Control.Windows;
 using DeskPanel.Agent.State.Mac;
 using DeskPanel.Agent.State.Windows;
 
-var options = AgentOptions.From(args, Environment.GetEnvironmentVariable("DESKPANEL_PORT"));
+CliRequest request;
+try { request = CliRequest.Parse(args, Environment.GetEnvironmentVariable("DESKPANEL_PORT")); }
+catch (ArgumentException e)
+{
+    Console.Error.WriteLine($"deskpanel-agent: {e.Message}\n\n{CliRequest.Usage}");
+    return 2;
+}
+if (CliRequest.Run(request, Console.Out) is { } exitCode) return exitCode;
+var options = request.Options;
+if (request.Background) BackgroundMode.Enter(new AgentPaths());
 
-var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = args, ContentRootPath = AppContext.BaseDirectory });
+// no other command-line configuration (no --urls and the like): the arguments above are the agent's whole command line
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = [.. request.HostArgs], ContentRootPath = AppContext.BaseDirectory });
 
 builder.WebHost.ConfigureKestrel(k =>
 {
@@ -131,10 +141,11 @@ app.Lifetime.ApplicationStarted.Register(() =>
     app.Logger.LogInformation("DeskPanel agent {Version} (run {RunId}) listening on http://127.0.0.1:{Port}; data in {Home}",
         run.Version, run.RunId, options.Port, home);
     // the link itself is never logged: logs get shared, the owner-only file does not
-    app.Logger.LogInformation("Settings: open the one-time link in {AdminLink} (tools/admin.sh does it)", adminLink);
+    app.Logger.LogInformation("Settings: run `deskpanel-agent settings` (opens the one-time link in {AdminLink})", adminLink);
 });
 
 app.Run();
+return 0;
 
 /// <summary>Visible to the in-process API tests (WebApplicationFactory).</summary>
 public partial class Program;

@@ -1,6 +1,6 @@
 # DeskPanel threat model
 
-Status: **M3** (layout editor) on branch `m3/layout-editor`: verified on a LAVA LXX504. Update this file in the same pull request as any change that adds a route, a file read, an outbound connection, a stored secret, or a control action.
+Status: **M4** (Windows adapters, signed releases, install/uninstall); 0.1.0 released. Phone flows verified on a LAVA LXX504. Update this file in the same pull request as any change that adds a route, a file read, an outbound connection, a stored secret, or a control action.
 
 ## Assets
 | Asset | Where |
@@ -40,6 +40,8 @@ Status: **M3** (layout editor) on branch `m3/layout-editor`: verified on a LAVA 
 
 | T16 | A layout carries unexpected data to the phone (scripts, URLs, wrong types) | Every saved option is checked against the catalogue schema (type, range, choices, id lists); unknown options and widget types refused with exact paths; hand edits are cleaned on load | `CatalogTests`, `LayoutEditorApiTests`, panel `catalog.test.ts` | **M3 done** |
 | T17 | Two editors overwrite each other's layout | Save carries a content-hash version; a stale version gets 409 and nothing is written | `ASaveOverSomeoneElsesChangeIsAConflict` | **M3 done** |
+| T18 | The installed agent or its login item is swapped or widened | Per-user install, no administrator rights; program file owner-only (`0700` on macOS), data folder owner-only; login item runs the fixed path with fixed arguments (no `--urls`; unknown arguments refused, so a tampered login item can't open the agent to the network); uninstall deletes only the agent's own files by name | `CliTests`, `InstallLayoutTests`, `UninstallTests` | **M4 done** |
+| T19 | Background log leaks secrets | `agent.log` owner-only, 2 MB with one old file kept; never contains device keys, proofs or the settings link (only the link file's path) | `deskpanel-agent status` prints its location | **M4 done** |
 
 ## Explicit non-goals (MVP)
 - Defending against malware already running as the same user on the PC (it can read the agent's files anyway).
