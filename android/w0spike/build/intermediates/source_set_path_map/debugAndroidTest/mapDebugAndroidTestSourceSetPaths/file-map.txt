@@ -1,0 +1,6 @@
+app.deskpanel.w0spike.test.w0spike-tracing-1.1.0-0 /Users/arunkumar/.gradle/caches/8.11.1/transforms/635e7357759d3cd5074936fd9bad1c2f/transformed/tracing-1.1.0/res
+app.deskpanel.w0spike.test.w0spike-core-1.6.1-1 /Users/arunkumar/.gradle/caches/8.11.1/transforms/a1054d4ee8b51c19d40878f559f7fc7e/transformed/core-1.6.1/res
+app.deskpanel.w0spike.test.w0spike-androidTest-2 /Users/arunkumar/Documents/DeskPanel/deskpanel/android/w0spike/build/generated/res/resValues/androidTest/debug
+app.deskpanel.w0spike.test.w0spike-mergeDebugAndroidTestResources-3 /Users/arunkumar/Documents/DeskPanel/deskpanel/android/w0spike/build/intermediates/incremental/debugAndroidTest/mergeDebugAndroidTestResources/merged.dir
+app.deskpanel.w0spike.test.w0spike-mergeDebugAndroidTestResources-4 /Users/arunkumar/Documents/DeskPanel/deskpanel/android/w0spike/build/intermediates/incremental/debugAndroidTest/mergeDebugAndroidTestResources/stripped.dir
+app.deskpanel.w0spike.test.w0spike-debugAndroidTest-5 /Users/arunkumar/Documents/DeskPanel/deskpanel/android/w0spike/build/intermediates/merged_res/debugAndroidTest/mergeDebugAndroidTestResources

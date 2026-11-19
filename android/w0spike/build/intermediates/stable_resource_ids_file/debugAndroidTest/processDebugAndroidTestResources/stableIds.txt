@@ -1,0 +1,2 @@
+app.deskpanel.w0spike.test:style/WhiteBackgroundTheme = 0x7f010001
+app.deskpanel.w0spike.test:style/WhiteBackgroundDialogTheme = 0x7f010000

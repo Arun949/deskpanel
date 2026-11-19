@@ -1,0 +1,3 @@
+app.deskpanel.w0spike.test
+style WhiteBackgroundDialogTheme
+style WhiteBackgroundTheme

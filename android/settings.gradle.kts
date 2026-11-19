@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "deskpanel"
 include(":app")
+include(":w0spike") // W0 spike only: never merged

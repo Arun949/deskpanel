@@ -1,0 +1,24 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="app.deskpanel.w0spike"
+4    android:versionCode="1"
+5    android:versionName="0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="24"
+9        android:targetSdkVersion="35" />
+10
+11    <uses-permission android:name="android.permission.INTERNET" />
+11-->/Users/arunkumar/Documents/DeskPanel/deskpanel/android/w0spike/src/main/AndroidManifest.xml:3:5-67
+11-->/Users/arunkumar/Documents/DeskPanel/deskpanel/android/w0spike/src/main/AndroidManifest.xml:3:22-64
+12
+13    <application
+13-->/Users/arunkumar/Documents/DeskPanel/deskpanel/android/w0spike/src/main/AndroidManifest.xml:4:5-73
+14        android:allowBackup="false"
+14-->/Users/arunkumar/Documents/DeskPanel/deskpanel/android/w0spike/src/main/AndroidManifest.xml:4:43-70
+15        android:debuggable="true"
+16        android:extractNativeLibs="false"
+17        android:label="W0 spike" />
+17-->/Users/arunkumar/Documents/DeskPanel/deskpanel/android/w0spike/src/main/AndroidManifest.xml:4:18-42
+18
+19</manifest>
