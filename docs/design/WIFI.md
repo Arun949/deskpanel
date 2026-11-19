@@ -1,6 +1,6 @@
 # Design: using the phone over Wi-Fi
 
-Status: **agreed** (decisions in §9), nothing built yet. Next: the W0 spike. Builds on the USB design (`docs/THREAT_MODEL.md`) and on what PhoneBox got
+Status: **agreed** (decisions in §9). **W0 spike passed** (§10). Next: W1. Builds on the USB design (`docs/THREAT_MODEL.md`) and on what PhoneBox got
 right and wrong (study notes, Module 4).
 
 ## 1. Goal
@@ -101,7 +101,7 @@ Phone                                                   Agent, Wi-Fi listener (T
 
 | Area | Change |
 |---|---|
-| Kestrel | A second listener: any address, port `8766` (set in the settings page and stored in the owner-only data folder, **never a command-line switch**, so T18 still holds: a tampered login item can't open the agent to the network), **HTTPS only**, TLS 1.2 or 1.3. 1.2 is needed because Android 7–9 can't do 1.3. Client certificate **required**. Max 16 connections, 5 s handshake timeout. The loopback listener on 8765 is unchanged |
+| Kestrel | A second listener: any address, port `8766` (set in the settings page and stored in the owner-only data folder, **never a command-line switch**, so T18 still holds: a tampered login item can't open the agent to the network), **HTTPS only**, TLS 1.2 or 1.3. On macOS .NET's TLS server only does 1.2 (W0 found this), with ECDHE + AES-256-GCM, so 1.2 must stay allowed. Client certificate **required**. Max 16 connections, 5 s handshake timeout. The loopback listener on 8765 is unchanged |
 | Connection filter | Before TLS: accept only remote addresses in 10/8, 172.16/12, 192.168/16, 169.254/16, fc00::/7 and fe80::/10. Everything else is closed at once |
 | Client check | `ClientCertificateValidation`: the certificate's public-key hash must match `clientSpki` of an active device with `wifi=true`. Certificate chains and dates are ignored; the key match *is* the identity. The matched device id goes into `HttpContext.Items` |
 | `TrustGate` | Requests on the Wi-Fi listener: (1) the route must carry `LanAllowed`, otherwise 404; (2) Device routes need the `Device` key **and** the same device as the TLS client certificate; (3) any `Origin` header gets 403 |
@@ -182,3 +182,40 @@ For a phone that has the app but no USB debugging. The good parts of PhoneBox's 
    for W-T4 and W-T5 must be written into the threat model before building.
 5. **Windows firewall:** `INSTALL.md`'s "Using Wi-Fi" section explains the prompt in advance: choose **Private networks**
    only, and it needs administrator rights once.
+
+## 10. W0 spike result (19 Nov 2026): passed
+
+Setup:
+- **Mac side:** a throwaway Kestrel server (`spike/w0/server`, on branch `spike/w0-wifi`, never merged), configured
+  exactly as §4 describes. Self-signed P-256 certificate; client certificate required; TLS 1.2+1.3 allowed.
+- **Phone side:** a throwaway app (`app.deskpanel.w0spike`, uninstalled afterwards) on the LAVA LXX504, Android 15.
+  It used an EC P-256 key generated in the Android Keystore, with a TrustManager that accepts only the pinned server key.
+- **Network:** both on the same home Wi-Fi (10.188.77.0/24). The phone's requests arrived from its Wi-Fi address, not over USB.
+
+| Check | Result |
+|---|---|
+| Phone with its Keystore key + correct pin | ✅ Connected. The server identified the phone by the hash of its Keystore public key (the same value the phone computed) |
+| The Keystore private key can't be exported | ✅ `getEncoded()` is null |
+| Phone with a wrong pin | ✅ Refused by the phone during the handshake, before any request was sent |
+| Phone without a client key | ✅ Refused by the server during the handshake (`CERTIFICATE_UNKNOWN`) |
+| Server that only accepts one registered key, phone with another key | ✅ Refused during the handshake (the validation callback returned false); the registered key still worked |
+| A client with no certificate (curl on the Mac) | ✅ Refused during the handshake |
+
+Findings that change the build:
+1. **macOS negotiates TLS 1.2 only,** even when the client offers 1.3: .NET's server-side TLS on macOS doesn't do 1.3.
+   - The cipher is `TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384` (forward secrecy, authenticated encryption), which is acceptable.
+   - Windows 11 can do 1.3. Keep both versions allowed; never allow anything below 1.2.
+2. **The key must go through PKCS#12 once** (`Export` then `X509CertificateLoader.LoadPkcs12`) before Kestrel on macOS
+   can use it. That fits storing it as an owner-only file (§3.3).
+3. **The client certificate's chain errors are expected.** It's self-signed by the Keystore, so .NET reports
+   `RemoteCertificateChainErrors`. Our check ignores chains and compares only the key hash, as designed.
+4. **Kestrel logs harmless `fail` entries on macOS** when a client closes a TLS connection ("The encryption operation
+   failed … Input/output error"). The Wi-Fi listener must filter these out, or `agent.log` fills with noise.
+5. **Android needs no special setup.** No extra permission beyond `INTERNET`, and no network-security-config change
+   (the custom TrustManager handles HTTPS). A plain `X509KeyManager` that returns the Keystore key works.
+
+Not covered by W0, still to check in W1:
+- Windows (Kestrel's client-certificate behaviour with SChannel);
+- long-lived SSE streams over Wi-Fi (sleep, Wi-Fi roaming);
+- reconnecting after the computer's IP address changes.
+
