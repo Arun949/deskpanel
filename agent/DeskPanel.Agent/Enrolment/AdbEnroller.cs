@@ -13,6 +13,7 @@ public sealed partial class AdbEnroller(
     DeviceStore store,
     IEnrolPrompt prompt,
     AgentOptions options,
+    WifiSetup wifi,
     ILogger<AdbEnroller> log) : BackgroundService
 {
     private static readonly TimeSpan AskAgainAfter = TimeSpan.FromMinutes(10);
@@ -75,7 +76,12 @@ public sealed partial class AdbEnroller(
             }
 
             await adb.EnsureReverseAsync(serial, options.Port, ct);
-            if (_opened.Add(serial)) await adb.OpenPanelAsync(serial, ct);
+            if (_opened.Add(serial))
+            {
+                // just plugged in: bring its Wi-Fi details up to date (or tell it Wi-Fi was turned off meanwhile)
+                if (store.ActiveForSerial(serial) is { } current) await wifi.RefreshAsync(current, ct);
+                await adb.OpenPanelAsync(serial, ct);
+            }
         }
     }
 

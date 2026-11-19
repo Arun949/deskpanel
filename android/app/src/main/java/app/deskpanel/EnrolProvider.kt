@@ -13,6 +13,10 @@ import android.os.Bundle
  * Receives the device key from the PC agent over USB:
  *   adb shell content call --uri content://app.deskpanel.enrol --method enrol --arg <deviceId> --extra key:s:<key>
  *   adb shell content call --uri content://app.deskpanel.enrol --method status
+ * and, for Wi-Fi (docs/design/WIFI.md §3.1), from the same agent over the same cable:
+ *   --method wifiKey                                   → the public half of the Keystore client key (spki, base64url)
+ *   --method wifiOn --extra port:i:N --extra pin:s:P --extra hosts:s:a,b   → stores how to reach the agent
+ *   --method wifiOff                                   → forgets that, and deletes the client key
  * call() is not covered by the manifest's android:permission, so every call is checked here: it must come from the
  * adb shell (uid 2000), which also holds DUMP. No other app can plant a key or learn which device id this phone has.
  */
@@ -34,6 +38,21 @@ class EnrolProvider : ContentProvider() {
                 val ok = Proof.isDeviceId(arg) && Proof.isKey(key)
                 if (ok) vault.store(arg!!, key!!)
                 Bundle().apply { putBoolean("ok", ok) }
+            }
+            "wifiKey" -> Bundle().apply {
+                // only for an enrolled phone: Wi-Fi is an extra for a phone the PC already trusts
+                if (vault.load() != null) putString("spki", Proof.base64Url(WifiKey.certificate().publicKey.encoded))
+            }
+            "wifiOn" -> {
+                val d = WifiRules.details(extras?.getInt("port", 0) ?: 0, extras?.getString("pin"), extras?.getString("hosts"))
+                val ok = d != null && vault.load() != null
+                if (ok) WifiStore(context!!).save(d!!)
+                Bundle().apply { putBoolean("ok", ok) }
+            }
+            "wifiOff" -> {
+                WifiStore(context!!).clear()
+                WifiKey.delete() // a fresh key next time; the old one is useless to the agent anyway
+                Bundle().apply { putBoolean("ok", true) }
             }
             else -> null
         }
