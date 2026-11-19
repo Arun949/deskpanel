@@ -44,7 +44,7 @@ class AgentStream(private val client: AgentClient, private val deliver: (event: 
                 val reply = client.get("/api/v1/stream", timeoutMs = 25_000) // a full state arrives every 10 s
                 if (reply.code == 200) {
                     opened = true
-                    dispatch(gen, "open", "{}")
+                    dispatch(gen, "open", JSONObject().put("via", client.via() ?: "usb").toString())
                     reply.body.bufferedReader(Charsets.UTF_8).use { r ->
                         var event = "message"
                         val data = StringBuilder()
@@ -55,6 +55,7 @@ class AgentStream(private val client: AgentClient, private val deliver: (event: 
                                     if (data.isNotEmpty()) {
                                         if (event == "state" && restarted(data.toString())) break
                                         dispatch(gen, event, data.toString())
+                                        if (client.usbIsBack()) break // on Wi-Fi and the cable is back: reconnect over USB
                                     }
                                     event = "message"; data.setLength(0)
                                 }

@@ -156,6 +156,29 @@ public sealed class WifiListenerTests(KestrelTestHost host) : IClassFixture<Kest
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync("/api/v1/media/next", null)).StatusCode);
     }
 
+    /// <summary>
+    /// Found in the real-phone test: with another phone keeping the Wi-Fi port open, a phone whose Wi-Fi is turned off
+    /// must lose its already-open stream too, not just new requests.
+    /// </summary>
+    [Fact]
+    public async Task TurningWifiOffEndsThatPhonesOpenStreamEvenIfThePortStaysOpen()
+    {
+        var phone = WifiPhone("WIFI-STREAM-A");
+        WifiPhone("WIFI-STREAM-B"); // keeps the listener open
+        await WaitForListener(open: true);
+        using var client = LanClient(phone.Certificate, Auth(phone));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        using var res = await client.GetAsync("/api/v1/stream", HttpCompletionOption.ResponseHeadersRead, cts.Token);
+        using var reader = new StreamReader(await res.Content.ReadAsStreamAsync(cts.Token));
+        Assert.StartsWith("id: ", await reader.ReadLineAsync(cts.Token));
+
+        var offAt = System.Diagnostics.Stopwatch.StartNew();
+        host.Devices.SetWifi(phone.Device.Id, clientSpki: null);
+        while (await reader.ReadLineAsync(cts.Token) is not null) { }
+        Assert.True(offAt.Elapsed < Endpoints.FullStateEvery, $"stream ended after {offAt.Elapsed}");
+        Assert.True(await Listening()); // the port stayed open for the other phone
+    }
+
     [Fact]
     public async Task TurningWifiOffForAPhoneCutsItOffAtOnce()
     {

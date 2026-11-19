@@ -57,7 +57,16 @@ export async function getJson<T>(path: string, signal?: AbortSignal): Promise<T>
   return (await res.json()) as T;
 }
 
-export type StreamEvent = { type: 'open' } | { type: 'close' } | { type: 'state'; msg: StateMessage };
+export type Via = 'usb' | 'wifi' | null;
+export type StreamEvent = { type: 'open'; via: Via } | { type: 'close' } | { type: 'state'; msg: StateMessage };
+
+/** Which route the Android shell's stream uses, from its "open" event ({"via":"usb"|"wifi"}); anything else is unknown. */
+export function parseVia(data: string): Via {
+  try {
+    const via = (JSON.parse(data) as { via?: unknown }).via;
+    return via === 'usb' || via === 'wifi' ? via : null;
+  } catch { return null; }
+}
 
 /** Hooks the Android shell calls (see android/ AgentStream): it owns the stream, because only it holds the key. */
 declare global {
@@ -72,7 +81,7 @@ declare global {
  */
 export function subscribe(listener: (e: StreamEvent) => void): () => void {
   const deliver = (event: string, data: string) => {
-    if (event === 'open') return listener({ type: 'open' });
+    if (event === 'open') return listener({ type: 'open', via: parseVia(data) });
     if (event === 'close') return listener({ type: 'close' });
     if (event !== 'state') return;
     try { listener({ type: 'state', msg: JSON.parse(data) as StateMessage }); } catch { /* ignore a malformed message */ }

@@ -87,6 +87,11 @@ public static partial class Endpoints
     {
         var ct = ctx.RequestAborted;
         var deviceId = (string)ctx.Items[TrustGate.DeviceIdItem]!; // set by TrustGate: this is a Device route
+        // over Wi-Fi, the phone must also stay allowed on Wi-Fi with the key that opened this connection
+        var wifiKey = Security.Wifi.WifiListener.IsLan(ctx) && ctx.Connection.ClientCertificate is { } cert
+            ? Security.Wifi.WifiIdentity.SpkiPin(cert) : null;
+        bool StillAllowed() => devices.Active(deviceId) is not null
+            && (wifiKey is null || devices.ActiveOnWifi(wifiKey)?.Id == deviceId);
         ctx.Response.ContentType = "text/event-stream";
         ctx.Response.Headers["X-Accel-Buffering"] = "no";
         string? lastMetrics = null, lastMedia = null, lastVolume = null;
@@ -99,7 +104,7 @@ public static partial class Endpoints
                 hub.Touch();
                 // wake at least every AccessCheckEvery, so a revoked phone loses its open stream within seconds
                 var s = await hub.WaitForChangeAsync(version, AccessCheckEvery, ct);
-                if (devices.Active(deviceId) is null) return;
+                if (!StillAllowed()) return; // revoked, or (over Wi-Fi) Wi-Fi turned off for this phone
                 var full = lastFull is not { } at || Environment.TickCount64 - at >= FullStateEvery.TotalMilliseconds;
                 if (!full && s.Version == version) continue; // woke only to check access: nothing new to send
                 string Ser<T>(T v) => JsonSerializer.Serialize(v, Json);

@@ -27,7 +27,8 @@ const live: LiveView = {
 
 const pager = document.getElementById('pager')!;
 const badge = h('div', 'status');
-document.body.append(badge);
+const via = h('div', 'via'); // a small "USB" / "Wi-Fi" mark: which route the phone uses right now
+document.body.append(badge, via);
 const page = new Page(pager, live);
 page.mount(FALLBACK_LAYOUT);
 
@@ -44,8 +45,8 @@ function onMessage(msg: StateMessage): void {
 }
 
 subscribe((e) => {
-  if (e.type === 'open') streaming = true;
-  else if (e.type === 'close') streaming = false;
+  if (e.type === 'open') { streaming = true; via.textContent = e.via === 'wifi' ? 'Wi-Fi' : e.via === 'usb' ? 'USB' : ''; }
+  else if (e.type === 'close') { streaming = false; via.textContent = ''; }
   else onMessage(e.msg);
 });
 
