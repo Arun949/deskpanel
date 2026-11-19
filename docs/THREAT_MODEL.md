@@ -42,6 +42,7 @@ Status: **M4** (Windows adapters, signed releases, install/uninstall); 0.1.0 rel
 | T17 | Two editors overwrite each other's layout | Save carries a content-hash version; a stale version gets 409 and nothing is written | `ASaveOverSomeoneElsesChangeIsAConflict` | **M3 done** |
 | T18 | The installed agent or its login item is swapped or widened | Per-user install, no administrator rights; program file owner-only (`0700` on macOS), data folder owner-only; login item runs the fixed path with fixed arguments (no `--urls`; unknown arguments refused, so a tampered login item can't open the agent to the network); uninstall deletes only the agent's own files by name | `CliTests`, `InstallLayoutTests`, `UninstallTests` | **M4 done** |
 | T19 | Background log leaks secrets | `agent.log` owner-only, 2 MB with one old file kept; never contains device keys, proofs or the settings link (only the link file's path) | `deskpanel-agent status` prints its location | **M4 done** |
+| T20 | A revoked phone keeps receiving live data over a stream it opened before the revoke | The stream re-checks that its device is still active every 2 s and ends when it isn't. New requests were already refused | `RevokingAPhoneEndsItsOpenStream` | **Fixed** (found while designing Wi-Fi) |
 
 ## Explicit non-goals (MVP)
 - Defending against malware already running as the same user on the PC (it can read the agent's files anyway).
