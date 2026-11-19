@@ -74,9 +74,10 @@ public sealed class InstallLayoutTests
     public void MacPaths()
     {
         var l = InstallLayout.For(HostOs.MacOS, "/Users/a", "/Users/a/.local/share", "/Users/a/Library/Application Support/DeskPanel");
-        Assert.Equal("/Users/a/Library/Application Support/DeskPanel/bin/deskpanel-agent", l.Executable);
-        Assert.Equal("/Users/a/Library/LaunchAgents/app.deskpanel.agent.plist", l.LaunchAgentPlist);
-        Assert.Equal("/Users/a/Library/Application Support/DeskPanel/agent.log", l.LogFile);
+        // Path.Combine, so the test also passes where the separator is a backslash
+        Assert.Equal(Path.Combine("/Users/a/Library/Application Support/DeskPanel", "bin", "deskpanel-agent"), l.Executable);
+        Assert.Equal(Path.Combine("/Users/a", "Library", "LaunchAgents", "app.deskpanel.agent.plist"), l.LaunchAgentPlist);
+        Assert.Equal(Path.Combine("/Users/a/Library/Application Support/DeskPanel", "agent.log"), l.LogFile);
     }
 
     [Fact]
