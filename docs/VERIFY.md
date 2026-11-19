@@ -19,6 +19,12 @@ not from the release page:
 minisign -V -p minisign.pub -m SHA256SUMS
 ```
 
+Or give the key directly (it's the second line of `release/minisign.pub`, key ID `A9F543A8905010DE`):
+
+```bash
+minisign -V -m SHA256SUMS -P RWTeEFCQqEP1qbX/PVKuYOq/A46wXTdB0YQEGAvFrP7PBR5G1NmTfGEJ
+```
+
 It must say `Signature and comment signature verified`, and the trusted comment must name the version you downloaded.
 
 ## 2. Checksums
@@ -50,7 +56,13 @@ download, compare its certificate fingerprint with the one below (`apksigner` is
 apksigner verify --print-certs deskpanel-X.Y.Z.apk
 ```
 
-Release certificate SHA-256: *(added with the first release)*
+Release certificate SHA-256:
+
+```text
+32:80:54:0B:9B:85:1D:A5:69:30:2F:E5:FA:56:20:13:EA:AB:30:13:03:94:6C:86:36:A5:9C:0F:B8:4D:4F:5D
+```
+
+`apksigner` prints it without colons and in lower case: `3280540b9b851da569302fe5fa562013eaab301303946c8636a59c0fb84d4f5d`.
 
 ## Running the agent for the first time
 
