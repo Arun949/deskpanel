@@ -19,10 +19,21 @@ public enum TrustClass
 /// <summary>Endpoint metadata carrying the route's <see cref="TrustClass"/>.</summary>
 public sealed record TrustMetadata(TrustClass Class);
 
+/// <summary>
+/// Marks a route the phone may use over Wi-Fi (docs/design/WIFI.md §4). Everything else is loopback-only, and Admin
+/// routes can never carry it (the route-classification test enforces that).
+/// </summary>
+public sealed record LanAllowedMetadata;
+
 public static class TrustEndpointExtensions
 {
     /// <summary>Declares who may call this endpoint (or every endpoint in a group).</summary>
     public static TBuilder WithTrust<TBuilder>(this TBuilder builder, TrustClass trust)
         where TBuilder : IEndpointConventionBuilder
         => builder.WithMetadata(new TrustMetadata(trust));
+
+    /// <summary>Allows this endpoint (or group) over the Wi-Fi listener as well as loopback.</summary>
+    public static TBuilder OverLan<TBuilder>(this TBuilder builder)
+        where TBuilder : IEndpointConventionBuilder
+        => builder.WithMetadata(new LanAllowedMetadata());
 }

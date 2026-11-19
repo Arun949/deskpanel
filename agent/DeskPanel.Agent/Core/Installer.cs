@@ -92,7 +92,7 @@ public sealed partial class Installer(AgentPaths paths, AgentOptions options, Te
 {
     /// <summary>Everything the agent writes in its data folder.</summary>
     public static readonly string[] DataFiles =
-        ["devices.json", "layout.json", "actions.json", "permissions.json", "admin-link", "audit.jsonl", "audit.jsonl.1", "agent.log", "agent.log.1"];
+        ["devices.json", "layout.json", "actions.json", "permissions.json", "admin-link", "audit.jsonl", "audit.jsonl.1", "agent.log", "agent.log.1", "wifi-key.pem", "wifi.json"];
 
     private readonly InstallLayout _layout = layout ?? InstallLayout.Current(paths);
     private bool Mac => _layout.Os == HostOs.MacOS && OperatingSystem.IsMacOS();

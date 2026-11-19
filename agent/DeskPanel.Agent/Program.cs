@@ -6,6 +6,7 @@ using DeskPanel.Agent.Core;
 using DeskPanel.Agent.Enrolment;
 using DeskPanel.Agent.Layout;
 using DeskPanel.Agent.Security;
+using DeskPanel.Agent.Security.Wifi;
 using DeskPanel.Agent.State;
 using DeskPanel.Agent.Control.Windows;
 using DeskPanel.Agent.State.Mac;
@@ -25,19 +26,27 @@ if (request.Background) BackgroundMode.Enter(new AgentPaths());
 // no other command-line configuration (no --urls and the like): the arguments above are the agent's whole command line
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = [.. request.HostArgs], ContentRootPath = AppContext.BaseDirectory });
 
+// the Wi-Fi listener's endpoint appears and disappears through this (docs/design/WIFI.md §4)
+var lanEndpoint = new LanEndpointSource();
+var lanConfig = new ConfigurationBuilder().Add(lanEndpoint).Build();
+
 builder.WebHost.ConfigureKestrel(k =>
 {
     k.AddServerHeader = false;
     k.Limits.MaxRequestBodySize = 64 * 1024;
     k.Limits.MaxRequestHeadersTotalSize = 16 * 1024;
     k.Limits.MaxRequestLineSize = 8 * 1024;
-    // Loopback only. Wi-Fi comes later as a separate, TLS-only listener with its own allow-list.
-    k.Listen(IPAddress.Loopback, options.Port);
+    // Loopback (USB via adb reverse, the settings page): plain HTTP, never on the network.
+    k.Listen(IPAddress.Loopback, k.ApplicationServices.GetRequiredService<AgentOptions>().Port);
+    // Wi-Fi: a separate HTTPS listener, only while a phone is allowed on it (WifiListener)
+    WifiListener.Configure(k, lanConfig);
 });
 
 builder.Logging.ClearProviders();
 builder.Logging.AddSimpleConsole(o => { o.SingleLine = true; o.TimestampFormat = "HH:mm:ss "; });
 builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
+// Kestrel logs harmless "fail" entries on macOS whenever a TLS client disconnects (W0 finding 4)
+builder.Logging.AddFilter("Microsoft.AspNetCore.Server.Kestrel", LogLevel.Critical);
 
 var s = builder.Services;
 s.AddSingleton(options);
@@ -52,6 +61,14 @@ s.AddSingleton(TimeProvider.System);
 s.AddSingleton<AdminSessions>();
 s.AddSingleton<IAdminAuthenticator>(sp => sp.GetRequiredService<AdminSessions>());   // settings-page session cookie
 s.AddSingleton<PermissionStore>();
+
+// Wi-Fi (off until a phone is allowed on it in the settings page)
+s.AddSingleton(lanEndpoint);
+s.AddSingleton(LanPolicy.Default);
+s.AddSingleton(sp => WifiSettings.Load(sp.GetRequiredService<AgentPaths>(), sp.GetRequiredService<AgentOptions>()));
+s.AddSingleton<WifiIdentity>(); // the key file is only made when first needed
+s.AddSingleton<WifiListener>();
+s.AddHostedService(sp => sp.GetRequiredService<WifiListener>());
 
 // controls: every request goes through ControlGate (permission, layout, rate limit, idempotency, audit)
 s.AddSingleton<ActionStore>();
