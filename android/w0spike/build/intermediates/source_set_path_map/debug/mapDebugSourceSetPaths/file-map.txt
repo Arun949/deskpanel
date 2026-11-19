@@ -1,7 +1,0 @@
-app.deskpanel.w0spike-pngs-0 /Users/arunkumar/Documents/DeskPanel/deskpanel/android/w0spike/build/generated/res/pngs/debug
-app.deskpanel.w0spike-resValues-1 /Users/arunkumar/Documents/DeskPanel/deskpanel/android/w0spike/build/generated/res/resValues/debug
-app.deskpanel.w0spike-packageDebugResources-2 /Users/arunkumar/Documents/DeskPanel/deskpanel/android/w0spike/build/intermediates/incremental/debug/packageDebugResources/merged.dir
-app.deskpanel.w0spike-packageDebugResources-3 /Users/arunkumar/Documents/DeskPanel/deskpanel/android/w0spike/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
-app.deskpanel.w0spike-debug-4 /Users/arunkumar/Documents/DeskPanel/deskpanel/android/w0spike/build/intermediates/merged_res/debug/mergeDebugResources
-app.deskpanel.w0spike-debug-5 /Users/arunkumar/Documents/DeskPanel/deskpanel/android/w0spike/src/debug/res
-app.deskpanel.w0spike-main-6 /Users/arunkumar/Documents/DeskPanel/deskpanel/android/w0spike/src/main/res

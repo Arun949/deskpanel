@@ -15,3 +15,6 @@ local.properties
 *.jks
 .claude/
 .kotlin/
+
+# any Android module build output (the W0 spike added a second module)
+android/*/build/
