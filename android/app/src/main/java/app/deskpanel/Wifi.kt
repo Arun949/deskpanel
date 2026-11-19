@@ -40,6 +40,9 @@ object WifiRules {
     /** base64url(SHA-256(SubjectPublicKeyInfo)): the same pin the agent computes (WifiIdentity.SpkiPin). */
     fun pinOf(subjectPublicKeyInfo: ByteArray): String =
         Proof.base64Url(MessageDigest.getInstance("SHA-256").digest(subjectPublicKeyInfo))
+
+    /** Constant time, so a timing difference reveals nothing about a near-miss key. */
+    fun pinMatches(subjectPublicKeyInfo: ByteArray, pin: String) = isPin(pin) && constantTimeEquals(pinOf(subjectPublicKeyInfo), pin)
 }
 
 /** The Wi-Fi details, in the app's private preferences (not secret: a port, addresses, and the agent's public-key pin). */
@@ -80,7 +83,13 @@ object WifiKey {
         return ks.getCertificate(ALIAS) as X509Certificate
     }
 
-    fun privateKey(): PrivateKey? = keyStore().getKey(ALIAS, null) as? PrivateKey
+    /** The existing key and its certificate, or null. Never creates one (only adb's wifiKey does). */
+    fun existing(): Pair<PrivateKey, X509Certificate>? {
+        val ks = keyStore()
+        val key = ks.getKey(ALIAS, null) as? PrivateKey ?: return null
+        val cert = ks.getCertificate(ALIAS) as? X509Certificate ?: return null
+        return key to cert
+    }
 
     @Synchronized
     fun delete() { keyStore().apply { if (containsAlias(ALIAS)) deleteEntry(ALIAS) } }

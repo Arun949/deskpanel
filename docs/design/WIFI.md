@@ -1,6 +1,6 @@
 # Design: using the phone over Wi-Fi
 
-Status: **agreed** (decisions in §9). **W0 spike passed** (§10). Next: W1. Builds on the USB design (`docs/THREAT_MODEL.md`) and on what PhoneBox got
+Status: **agreed** (decisions in §9). **W0 spike passed** (§10). **W1 built and verified on a real phone** (§11). Next: W3 comfort items, when wanted. Builds on the USB design (`docs/THREAT_MODEL.md`) and on what PhoneBox got
 right and wrong (study notes, Module 4).
 
 ## 1. Goal
@@ -218,4 +218,29 @@ Not covered by W0, still to check in W1:
 - Windows (Kestrel's client-certificate behaviour with SChannel);
 - long-lived SSE streams over Wi-Fi (sleep, Wi-Fi roaming);
 - reconnecting after the computer's IP address changes.
+
+## 11. W1 real-world test (19 Nov 2026): passed
+
+LAVA LXX504 (Android 15), the agent from `w1/phone-transport` on the Mac, both on the same home Wi-Fi.
+
+| Case | Result |
+|---|---|
+| "Allow over Wi-Fi" with the phone plugged in | ✅ Keys swapped over adb. The phone stored the agent's pin (equal to an independent openssl computation), and the port opened only then |
+| Unplug | ✅ Within seconds the panel stayed live and showed "Wi-Fi"; connections came from the phone's Wi-Fi address |
+| A control over Wi-Fi | ✅ play/pause twice, about 205 ms each, through the normal gate and activity log |
+| Plug back in | ✅ Back to "USB" within the 30 s re-check |
+| Wi-Fi off while unplugged | ✅ The phone went offline, and the agent forgot its key. The port closed: it was the only Wi-Fi phone |
+| Agent restarted while the phone was on Wi-Fi | ✅ The port reopened at start, and the phone was back 3 s later after a fresh proof |
+| "Allow over Wi-Fi" off with the phone plugged in (step 2) | ✅ The phone deleted its details and its Keystore key (a new key was made on the next request) |
+
+Found and fixed during the test:
+- **An open stream over Wi-Fi only re-checked revocation.** Another phone could keep the port open, and then a phone
+  whose Wi-Fi was turned off kept its stream until it reconnected.
+- It now also re-checks that the phone is allowed on Wi-Fi with the same key.
+- Test: `TurningWifiOffEndsThatPhonesOpenStreamEvenIfThePortStaysOpen`, which fails on the old code.
+
+Still open:
+- Windows hand test (the same checks pass in CI on Windows);
+- the computer's address changing while the phone is unplugged (the phone then needs one USB connection; W3 adds discovery);
+- an hours-long Wi-Fi session (sleep, roaming).
 

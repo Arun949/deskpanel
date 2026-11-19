@@ -49,19 +49,19 @@ Status: **M4** (Windows adapters, signed releases, install/uninstall); 0.1.0 rel
 - Defending a rooted phone.
 - Wi-Fi access: see the section below (being built in W1).
 
-## Wi-Fi (W1, in progress; design: `docs/design/WIFI.md`)
+## Wi-Fi (W1; design: `docs/design/WIFI.md`; verified on the LAVA LXX504 on 19 Nov 2026)
 
 | ID | Threat | Mitigation | Test | Status |
 |---|---|---|---|---|
-| W-T1 | Someone on the Wi-Fi reads the traffic | HTTPS only on the Wi-Fi port (TLS 1.2+1.3) | `APhoneWithItsKeyAndTheRightPinGetsItsState` | **Agent done** |
-| W-T2 | A fake agent in the middle | Phone pins the agent's public key, learned over adb | `TheClientRefusesAnAgentWithAnotherKey` (agent side); phone in W1 step 3 | Phone: pending |
-| W-T3 | Any device on the Wi-Fi connects | Client certificate required; its key must be a registered, active, Wi-Fi-enabled phone's | `WithoutAClientKeyTheHandshakeFails`, `AnUnregisteredClientKeyFailsTheHandshake` | **Agent done** |
-| W-T4 | A stolen device key used over Wi-Fi | The device key must belong to the same phone as the TLS client key | `APhoneCanNotUseAnotherPhonesDeviceKey` | **Agent done** |
-| W-T5 | Browsers on the network | Mutual TLS; any `Origin`/`Sec-Fetch-Site` header refused | `ABrowserHeaderIsRefusedOverWifi` | **Agent done** |
-| W-T6 | Settings page or local-only routes over Wi-Fi | Only `OverLan` routes; Admin never (test); exact list reviewed | `SettingsRoutesDoNotExistOverWifi`, `NoAdminRouteIsEverAllowedOverWifi`, `TheWifiRoutesAreExactlyThePhonesRoutes` | **Agent done** |
-| W-T7 | Flooding the Wi-Fi port | Private remote addresses only (checked before TLS), 16 connections, 5 s handshake timeout | `OnlyPrivateAddressesMayConnect` | **Agent done** |
-| W-T8 | Port open on café/hotel Wi-Fi | Listener exists only while a phone is allowed on Wi-Fi; public addresses refused | `OpensForTheFirstWifiPhoneAndClosesWhenTheLastIsRevoked` | **Agent done**; approved networks: W3 |
-| W-T9 | Lost phone | Revoke or Wi-Fi off cuts it off at once, open connections included (checked per request; streams every 2 s) | `TurningWifiOffForAPhoneCutsItOffAtOnce`, `RevokingAPhoneEndsItsOpenStream` | **Agent done** |
+| W-T1 | Someone on the Wi-Fi reads the traffic | HTTPS only on the Wi-Fi port (TLS 1.2+1.3) | `APhoneWithItsKeyAndTheRightPinGetsItsState` | **Done** |
+| W-T2 | A fake agent in the middle | Phone pins the agent's public key, learned over adb | `TheClientRefusesAnAgentWithAnotherKey`, Kotlin `TransportTest` (`PinnedTrust`) | **Done** |
+| W-T3 | Any device on the Wi-Fi connects | Client certificate required; its key must be a registered, active, Wi-Fi-enabled phone's | `WithoutAClientKeyTheHandshakeFails`, `AnUnregisteredClientKeyFailsTheHandshake` | **Done** |
+| W-T4 | A stolen device key used over Wi-Fi | The device key must belong to the same phone as the TLS client key | `APhoneCanNotUseAnotherPhonesDeviceKey` | **Done** |
+| W-T5 | Browsers on the network | Mutual TLS; any `Origin`/`Sec-Fetch-Site` header refused | `ABrowserHeaderIsRefusedOverWifi` | **Done** |
+| W-T6 | Settings page or local-only routes over Wi-Fi | Only `OverLan` routes; Admin never (test); exact list reviewed | `SettingsRoutesDoNotExistOverWifi`, `NoAdminRouteIsEverAllowedOverWifi`, `TheWifiRoutesAreExactlyThePhonesRoutes` | **Done** |
+| W-T7 | Flooding the Wi-Fi port | Private remote addresses only (checked before TLS), 16 connections, 5 s handshake timeout | `OnlyPrivateAddressesMayConnect` | **Done** |
+| W-T8 | Port open on café/hotel Wi-Fi | Listener exists only while a phone is allowed on Wi-Fi; public addresses refused | `OpensForTheFirstWifiPhoneAndClosesWhenTheLastIsRevoked` | **Done**; approved networks: W3 |
+| W-T9 | Lost phone | Revoke or Wi-Fi off cuts it off at once, open connections included (checked per request; an open stream re-checks every 2 s that the phone is active **and** still allowed on Wi-Fi with that key; gap found in the real-phone test) | `TurningWifiOffForAPhoneCutsItOffAtOnce`, `TurningWifiOffEndsThatPhonesOpenStreamEvenIfThePortStaysOpen`, `RevokingAPhoneEndsItsOpenStream` | **Done** |
 | W-T10 | Agent's Wi-Fi key copied | `wifi-key.pem` owner-only; DPAPI-encrypted on Windows; made only when first needed; removed by uninstall | `TheKeyIsMadeOnceKeptOwnerOnlyAndReused`, `APhoneWithoutWifiLearnsNothingAndNoKeyIsMade` | **Done** |
-| W-T11 | Old IP now belongs to another device | Pin check fails, so "not connected" at worst | phone, W1 step 3 | Pending |
+| W-T11 | Old IP now belongs to another device | Pin check fails during the handshake, before anything is sent, so "not connected" at worst | Kotlin `TransportTest` (`anyOtherKeyIsRefused`) | **Done** |
 | W-T12 | Another app on the phone, or a crafted value, abuses the Wi-Fi setup | `wifiKey`/`wifiOn`/`wifiOff` accept only the adb shell (uid 2000 + DUMP), like enrolment; `wifiKey` answers only for an enrolled phone. The agent checks the phone's key is a real P-256 key before trusting its pin, and checks every value (port, pin, IPv4 addresses) before it goes through the phone's shell; the phone checks them again (private IPv4 only). Turning Wi-Fi on needs the phone plugged in; off works at once and deletes the phone's key | `WifiSetupTests` (12), `WifiRulesTest` (Kotlin); verified on the LAVA phone | **Done** |

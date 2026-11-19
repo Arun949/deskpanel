@@ -72,4 +72,5 @@ html.night #pager { filter: brightness(0.35); }
 /* connection badge */
 .status { position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%); padding: 4px 12px; border-radius: 999px; font-size: 0.8rem; background: #232c38; color: var(--muted); }
 .status[data-kind="ok"] { display: none; }
+.via { position: fixed; right: 10px; bottom: 8px; font-size: 0.7rem; color: var(--muted); opacity: 0.6; pointer-events: none; }
 .status[data-kind="stale"] { color: var(--warn); }

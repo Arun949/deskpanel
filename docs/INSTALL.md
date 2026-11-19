@@ -120,6 +120,29 @@ The settings page has four tabs:
 - **Key presses** need Accessibility: System Settings → Privacy & Security → Accessibility → add or enable `deskpanel-agent`.
 - **Media control** needs Automation: macOS asks once for Music, Spotify and System Events.
 
+## Using Wi-Fi (optional)
+
+Once the phone works over USB, it can also use your home or office Wi-Fi, so the cable becomes optional:
+
+1. Keep the phone plugged in, and in the settings page (Phones tab) tick **Allow over Wi-Fi** for it.
+2. Unplug. Within a few seconds the panel's corner shows **Wi-Fi** instead of **USB**. Plug back in any time, and it
+   switches back to USB (faster, and it charges).
+
+How it works, in short:
+- **The phone and computer swap keys over USB, never over the network.** Over Wi-Fi everything is encrypted. The phone
+  only talks to *your* agent, and the agent only accepts phones you allowed.
+- **The settings page never works over Wi-Fi.**
+- **Nothing listens on the network until you allow a phone.** Untick the switch, or revoke the phone, and it's cut off at once.
+
+Things to know:
+- Both devices must be on the same private network (home or office, not a café hotspot with client isolation).
+- If the computer's address changes (a new router, or DHCP), plug the phone in once to refresh it. A **DHCP reservation**
+  for the computer in your router avoids this.
+- **Windows:** the first time Wi-Fi is turned on, Windows Firewall asks whether to allow `deskpanel-agent`. Choose
+  **Private networks** only. Allowing it needs administrator rights once.
+- **macOS:** if the firewall is on, macOS asks once whether `deskpanel-agent` may accept incoming connections. Choose **Allow**.
+- The port is 8766. To change it, put `{"port": 9000}` in `wifi.json` in the data folder, then restart the agent.
+
 ## Day to day
 
 - **Check whether it's installed and running.** If `status` says it isn't running, the log usually says why.
