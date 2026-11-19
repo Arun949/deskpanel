@@ -16,7 +16,11 @@ public sealed record EnrolledDevice(
     string AuthHash,
     string ProofKey,
     DateTimeOffset CreatedAt,
-    bool Revoked = false);
+    bool Revoked = false,
+    bool Wifi = false,
+    string? ClientSpki = null);
+// Wifi/ClientSpki (docs/design/WIFI.md §3.1): the phone may connect over Wi-Fi with the Keystore key whose public-key
+// hash is ClientSpki. Older devices.json files simply lack them (false/null: USB only).
 
 /// <summary>Per-device keys (PhoneBox shared one token for every phone, Module 4). Stored owner-only in devices.json.</summary>
 public sealed class DeviceStore
@@ -25,6 +29,9 @@ public sealed class DeviceStore
     private readonly string _path;
     private readonly Lock _lock = new();
     private List<EnrolledDevice> _devices;
+
+    /// <summary>Raised after any enrol, revoke or Wi-Fi change (the Wi-Fi listener opens or closes on it).</summary>
+    public event Action? Changed;
 
     public DeviceStore(AgentPaths paths)
     {
@@ -49,6 +56,7 @@ public sealed class DeviceStore
             _devices = [.. _devices.Select(d => d.Serial == serial && !d.Revoked ? d with { Revoked = true } : d), device];
             Save();
         }
+        Changed?.Invoke();
         return (device, key);
     }
 
@@ -59,7 +67,35 @@ public sealed class DeviceStore
             _devices = [.. _devices.Select(d => d.Id == id ? d with { Revoked = true } : d)];
             Save();
         }
+        Changed?.Invoke();
     }
+
+    /// <summary>
+    /// Turns Wi-Fi on for a device with the public-key hash of its Keystore client key, or off (null). Off forgets the
+    /// key hash, so that phone's next Wi-Fi handshake fails. Returns false for an unknown or revoked device.
+    /// </summary>
+    public bool SetWifi(string id, string? clientSpki)
+    {
+        lock (_lock)
+        {
+            if (!_devices.Any(d => d.Id == id && !d.Revoked)) return false;
+            _devices = [.. _devices.Select(d => d.Id == id ? d with { Wifi = clientSpki is not null, ClientSpki = clientSpki } : d)];
+            Save();
+        }
+        Changed?.Invoke();
+        return true;
+    }
+
+    /// <summary>The active device allowed on Wi-Fi with this client key, or null. Used during the TLS handshake.</summary>
+    public EnrolledDevice? ActiveOnWifi(string clientSpki)
+    {
+        lock (_lock)
+            return _devices.FirstOrDefault(d => !d.Revoked && d.Wifi && d.ClientSpki is { } k
+                && CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(k), Encoding.ASCII.GetBytes(clientSpki)));
+    }
+
+    /// <summary>True while at least one active device may use Wi-Fi (the listener runs only then).</summary>
+    public bool AnyOnWifi() { lock (_lock) return _devices.Any(d => !d.Revoked && d.Wifi && d.ClientSpki is not null); }
 
     public IReadOnlyList<EnrolledDevice> All() { lock (_lock) return _devices.ToList(); }
 

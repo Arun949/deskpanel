@@ -19,6 +19,9 @@ public sealed record HelloResponse(string App, int Api, string Version, string R
 public sealed record StateMessage(string RunId, long Version, long Ts, bool Full,
     MetricsSnapshot? Metrics, MediaSnapshot? Media, VolumeSnapshot? Volume, string? LayoutVersion = null);
 
+/// <summary>Body of <c>GET /api/v1/wifi</c>: where and how this phone reaches the agent over Wi-Fi.</summary>
+public sealed record WifiInfo(bool Enabled, int? Port, string? Pin, IReadOnlyList<string> Addresses);
+
 public sealed record LayoutResponse(int SchemaVersion, IReadOnlyList<WidgetConfig> Widgets, IReadOnlyList<Control.PublicAction> Actions);
 
 public static partial class Endpoints
@@ -35,16 +38,16 @@ public static partial class Endpoints
     {
         var v1 = app.MapGroup("/api/v1");
 
-        v1.MapGet("/hello", Hello).WithTrust(TrustClass.Public);
+        v1.MapGet("/hello", Hello).WithTrust(TrustClass.Public).OverLan();
 
         v1.MapGet("/state", (StateHub hub, AgentRun run, LayoutStore layout) =>
         {
             hub.Touch();
             var s = hub.Current;
             return new StateMessage(run.RunId, s.Version, s.Ts, true, s.Metrics, s.Media, s.Volume, layout.Version);
-        }).WithTrust(TrustClass.Device);
+        }).WithTrust(TrustClass.Device).OverLan();
 
-        v1.MapGet("/stream", Stream).WithTrust(TrustClass.Device);
+        v1.MapGet("/stream", Stream).WithTrust(TrustClass.Device).OverLan();
 
         // the layout plus label/icon/kind of the actions its shortcuts widgets list; never an action's target
         v1.MapGet("/layout", (LayoutStore layout, Control.ActionStore actions) =>
@@ -53,7 +56,17 @@ public static partial class Endpoints
             var ids = LayoutStore.ActionIds(doc);
             return new LayoutResponse(doc.SchemaVersion, doc.Widgets,
                 [.. actions.All().Where(a => ids.Contains(a.Id)).Select(a => new Control.PublicAction(a.Id, a.Label, a.Kind, a.Icon))]);
-        }).WithTrust(TrustClass.Device);
+        }).WithTrust(TrustClass.Device).OverLan();
+
+        // what this phone needs to reach the agent over Wi-Fi (asked over USB or Wi-Fi). The pin is public information;
+        // a phone without Wi-Fi gets only "enabled: false", and the key file isn't even created for it.
+        v1.MapGet("/wifi", (HttpContext ctx, DeviceStore devices, Security.Wifi.WifiSettings settings) =>
+        {
+            var device = devices.Active((string)ctx.Items[TrustGate.DeviceIdItem]!);
+            if (device is not { Wifi: true }) return new WifiInfo(false, null, null, []);
+            var identity = ctx.RequestServices.GetRequiredService<Security.Wifi.WifiIdentity>();
+            return new WifiInfo(true, settings.Port, identity.Pin, Security.Wifi.LanAddresses.Current());
+        }).WithTrust(TrustClass.Device).OverLan();
     }
 
     private static IResult Hello(string? d, string? n, AgentRun run, DeviceStore devices)

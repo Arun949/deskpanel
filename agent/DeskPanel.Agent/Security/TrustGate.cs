@@ -8,6 +8,7 @@ public sealed partial class TrustGate(
     RequestDelegate next,
     IDeviceAuthenticator devices,
     IAdminAuthenticator admins,
+    DeviceStore store,
     ILogger<TrustGate> log)
 {
     /// <summary>The authenticated device id, for handlers and the audit log.</summary>
@@ -26,6 +27,21 @@ public sealed partial class TrustGate(
             return Task.CompletedTask;
         }
 
+        // Wi-Fi (docs/design/WIFI.md §4): only routes marked OverLan, never Admin, and only for the device whose
+        // Keystore key opened this TLS connection (it may have been revoked or lost Wi-Fi since the handshake).
+        string? wifiDevice = null;
+        if (Wifi.WifiListener.IsLan(context))
+        {
+            if (trust.Class == TrustClass.Admin || endpoint.Metadata.GetMetadata<LanAllowedMetadata>() is null)
+            {
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return Task.CompletedTask;
+            }
+            var certificate = context.Connection.ClientCertificate;
+            wifiDevice = certificate is null ? null : store.ActiveOnWifi(Wifi.WifiIdentity.SpkiPin(certificate))?.Id;
+            if (wifiDevice is null) return Unauthorized(context, "Device");
+        }
+
         switch (trust.Class)
         {
             case TrustClass.Public:
@@ -33,6 +49,8 @@ public sealed partial class TrustGate(
             case TrustClass.Device:
                 var deviceId = devices.Authenticate(context);
                 if (deviceId is null) return Unauthorized(context, "Device");
+                // over Wi-Fi the key must belong to the same phone as the TLS client key: no borrowing another phone's key
+                if (wifiDevice is not null && deviceId != wifiDevice) return Unauthorized(context, "Device");
                 context.Items[DeviceIdItem] = deviceId;
                 break;
             case TrustClass.Admin:

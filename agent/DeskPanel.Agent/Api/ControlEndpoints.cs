@@ -15,7 +15,7 @@ public static class ControlEndpoints
 
     public static void MapControls(this IEndpointRouteBuilder app)
     {
-        var v1 = app.MapGroup("/api/v1").WithTrust(TrustClass.Device);
+        var v1 = app.MapGroup("/api/v1").WithTrust(TrustClass.Device).OverLan(); // the phone's controls work over Wi-Fi too
 
         v1.MapPost("/media/{op}", async (string op, HttpContext ctx, ControlGate gate, IMediaControl media, StateHub hub, LayoutStore layout) =>
             !MediaOps.Contains(op)

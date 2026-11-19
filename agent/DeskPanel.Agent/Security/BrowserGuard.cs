@@ -17,6 +17,16 @@ public sealed class BrowserGuard(RequestDelegate next, AgentOptions options)
 
     public Task InvokeAsync(HttpContext context)
     {
+        // Wi-Fi has no name to check in Host; mutual TLS already keeps browsers out. A browser header is refused anyway.
+        if (Wifi.WifiListener.IsLan(context))
+        {
+            if (context.Request.Headers.Origin.Count > 0 || context.Request.Headers["Sec-Fetch-Site"].Count > 0)
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return Task.CompletedTask;
+            }
+            return next(context);
+        }
         if (!IsAllowed(context.Request.Host.Host, context.Request.Headers.Origin.ToString(),
                 context.Request.Headers["Sec-Fetch-Site"].ToString(), _sameOrigins))
         {

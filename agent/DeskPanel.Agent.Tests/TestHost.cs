@@ -16,14 +16,26 @@ namespace DeskPanel.Agent.Tests;
 /// <summary>
 /// The real app with a throw-away data folder, no adb loop (it could pop enrolment dialogs) and fixed state sources.
 /// </summary>
-public sealed class TestHost : WebApplicationFactory<Program>
+public class TestHost : WebApplicationFactory<Program>
 {
     public string Home { get; } = Directory.CreateTempSubdirectory("deskpanel-test-").FullName;
     public FakeSources Sources { get; } = new();
     public FakeControls Controls { get; } = new();
 
+    /// <summary>Set by <see cref="KestrelTestHost"/>: real sockets on free ports instead of the in-memory server.</summary>
+    protected int? LoopbackPort { get; init; }
+    protected int? LanPort { get; init; }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder) => builder.ConfigureServices(s =>
     {
+        if (LoopbackPort is { } loopback)
+        {
+            s.RemoveAll<AgentOptions>(); s.AddSingleton(new AgentOptions(loopback));
+            s.RemoveAll<Security.Wifi.WifiSettings>(); s.AddSingleton(new Security.Wifi.WifiSettings(LanPort!.Value));
+            // the tests connect from 127.0.0.1, which the real policy refuses; everything else stays as in production
+            s.RemoveAll<Security.Wifi.LanPolicy>();
+            s.AddSingleton(new Security.Wifi.LanPolicy(a => a is not null && (System.Net.IPAddress.IsLoopback(a) || Security.Wifi.LanAddresses.IsPrivate(a)), 16));
+        }
         s.RemoveAll<AgentPaths>();
         s.AddSingleton(new AgentPaths(Home));
         foreach (var d in s.Where(d => d.ServiceType == typeof(IHostedService) && d.ImplementationType == typeof(AdbEnroller)).ToList())
@@ -88,6 +100,28 @@ public sealed class TestHost : WebApplicationFactory<Program>
     {
         base.Dispose(disposing);
         try { Directory.Delete(Home, recursive: true); } catch (IOException) { }
+    }
+}
+
+/// <summary>The real app on real sockets (loopback and the Wi-Fi listener on free ports), for TLS tests.</summary>
+public sealed class KestrelTestHost : TestHost
+{
+    public KestrelTestHost()
+    {
+        LoopbackPort = FreePort();
+        LanPort = FreePort();
+        UseKestrel();
+        StartServer();
+    }
+
+    public int Loopback => LoopbackPort!.Value;
+    public int Lan => LanPort!.Value;
+
+    private static int FreePort()
+    {
+        using var l = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        l.Start();
+        return ((System.Net.IPEndPoint)l.LocalEndpoint).Port;
     }
 }
 
