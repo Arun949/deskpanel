@@ -34,7 +34,9 @@ public sealed class NoAppPicker : IAppPicker
 
 public sealed record LayoutEnvelope(string Version, LayoutDoc Layout);
 
-public sealed record DeviceView(string Id, string Model, string Serial, DateTimeOffset CreatedAt, bool Revoked, IReadOnlyList<string> Permissions);
+public sealed record DeviceView(string Id, string Model, string Serial, DateTimeOffset CreatedAt, bool Revoked, IReadOnlyList<string> Permissions, bool Wifi = false);
+
+public sealed record WifiSwitch(bool On);
 public sealed record PermissionsBody(IReadOnlyList<string> Permissions);
 
 public static class AdminEndpoints
@@ -73,7 +75,17 @@ public static class AdminEndpoints
 
         api.MapGet("/devices", (DeviceStore devices, PermissionStore permissions) =>
             devices.All().OrderByDescending(d => d.CreatedAt)
-                .Select(d => new DeviceView(d.Id, d.Model, d.Serial, d.CreatedAt, d.Revoked, d.Revoked ? [] : permissions.For(d.Id))));
+                .Select(d => new DeviceView(d.Id, d.Model, d.Serial, d.CreatedAt, d.Revoked, d.Revoked ? [] : permissions.For(d.Id), d.Wifi && !d.Revoked)));
+
+        // Wi-Fi per phone (docs/design/WIFI.md §3.1). On needs the phone plugged in; off works at once, plugged in or not.
+        api.MapPost("/devices/{id}/wifi", async (string id, WifiSwitch body, Enrolment.WifiSetup setup, CancellationToken ct) =>
+        {
+            var result = body.On ? await setup.EnableAsync(id, ct) : await setup.DisableAsync(id, ct);
+            return result == Enrolment.WifiSetupResult.NotFound ? Results.NotFound() : Results.Ok(new { result = result.ToString() });
+        });
+
+        api.MapGet("/wifi", (Security.Wifi.WifiListener listener) =>
+            new { open = listener.IsOpen, port = listener.Port, addresses = Security.Wifi.LanAddresses.Current() });
 
         api.MapPost("/devices/{id}/revoke", (string id, DeviceStore devices, PermissionStore permissions) =>
         {

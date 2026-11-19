@@ -38,9 +38,12 @@ public static class LanAddresses
     {
         try
         {
+            // interfaces with a gateway (the real network) first, so a phone tries Wi-Fi/Ethernet before a VPN tunnel
             return [.. NetworkInterface.GetAllNetworkInterfaces()
                 .Where(n => n.OperationalStatus == OperationalStatus.Up && n.NetworkInterfaceType != NetworkInterfaceType.Loopback)
-                .SelectMany(n => n.GetIPProperties().UnicastAddresses)
+                .Select(n => n.GetIPProperties())
+                .OrderByDescending(p => p.GatewayAddresses.Any(g => g.Address.AddressFamily == AddressFamily.InterNetwork && !g.Address.Equals(IPAddress.Any)))
+                .SelectMany(p => p.UnicastAddresses)
                 .Select(a => a.Address)
                 .Where(a => a.AddressFamily == AddressFamily.InterNetwork && IsPrivate(a) && !a.ToString().StartsWith("169.254.", StringComparison.Ordinal))
                 .Select(a => a.ToString())

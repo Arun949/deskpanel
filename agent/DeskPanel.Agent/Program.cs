@@ -75,6 +75,7 @@ s.AddSingleton<ActionStore>();
 s.AddSingleton<AuditLog>();
 s.AddSingleton<ControlGate>();
 s.AddSingleton(sp => new Adb(sp.GetRequiredService<IToolRunner>()));
+s.AddSingleton<WifiSetup>();         // Wi-Fi is switched on per phone over adb, too
 s.AddHostedService<AdbEnroller>(); // USB enrolment (adb is the root of trust)
 
 // Platform adapters. Each platform provides: metrics, media (read + control), volume (read + control), app launch,

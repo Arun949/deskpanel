@@ -64,14 +64,16 @@ public sealed partial class WifiListener(DeviceStore devices, WifiSettings setti
     private void Refresh()
     {
         var open = devices.AnyOnWifi();
+        bool? was;
         lock (_lock)
         {
             if (_open == open) return;
-            _open = open;
+            (was, _open) = (_open, open);
         }
         endpoint.Set(open ? settings.Port : null);
         if (open) LogOpened(log, settings.Port, string.Join(", ", LanAddresses.Current()));
-        else LogClosed(log);
+        else if (was == true) LogClosed(log);
+        else LogOff(log); // at startup with no Wi-Fi phone: say it plainly, nothing was ever open
     }
 
     /// <summary>True when this request arrived through the Wi-Fi listener.</summary>
@@ -119,4 +121,7 @@ public sealed partial class WifiListener(DeviceStore devices, WifiSettings setti
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Wi-Fi: listener closed (no phone is allowed on Wi-Fi)")]
     private static partial void LogClosed(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Wi-Fi: off (no phone is allowed on Wi-Fi; nothing listens on the network)")]
+    private static partial void LogOff(ILogger logger);
 }

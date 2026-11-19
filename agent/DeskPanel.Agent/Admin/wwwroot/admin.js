@@ -19,7 +19,7 @@ async function api(path, options = {}) {
     headers: { 'X-DeskPanel-Admin': '1', ...(options.body ? { 'Content-Type': 'application/json' } : {}) },
     credentials: 'same-origin',
   });
-  if (res.status === 401) { document.body.replaceChildren(h('main', {}, h('p', {}, 'Signed out. Open a fresh admin link: tools/admin.sh'))); throw new Error('signed out'); }
+  if (res.status === 401) { document.body.replaceChildren(h('main', {}, h('p', {}, 'Signed out. Open the settings again: deskpanel-agent settings'))); throw new Error('signed out'); }
   if (!res.ok && res.status !== 204) throw new Error(`${path}: ${res.status}`);
   return res.status === 204 ? null : res.json();
 }
@@ -30,6 +30,10 @@ let permissionInfo = [];
 async function loadDevices() {
   permissionInfo = await api('/permissions');
   const devices = await api('/devices');
+  const wifi = await api('/wifi');
+  $('wifi-status').textContent = wifi.open
+    ? `Wi-Fi: listening on port ${wifi.port}` + (wifi.addresses.length ? ` (this computer: ${wifi.addresses.join(', ')})` : '') + '. Only phones allowed below can connect.'
+    : 'Wi-Fi: off. Nothing listens on the network until you allow a phone below.';
   const list = $('device-list');
   if (devices.length === 0) { list.replaceChildren(h('p', { class: 'hint' }, 'No phone enrolled yet. Plug one in with the app installed.')); return; }
   list.replaceChildren(...devices.map((d) => h('div', { class: 'card' },
@@ -38,6 +42,10 @@ async function loadDevices() {
     d.revoked ? null : permissionInfo.map((p) => h('label', { class: 'perm' },
       h('input', { type: 'checkbox', checked: d.permissions.includes(p.id), onchange: () => savePermissions(d.id) , 'data-device': d.id, 'data-perm': p.id }),
       h('span', {}, p.description), h('code', {}, p.id))),
+    d.revoked ? null : h('label', { class: 'perm wifi' },
+      h('input', { type: 'checkbox', checked: d.wifi, onchange: (e) => setWifi(d, e.target) }),
+      h('span', {}, 'Allow over Wi-Fi'),
+      h('span', { class: 'hint', id: `wifi-msg-${d.id}` }, d.wifi ? 'On: the phone can be unplugged.' : 'Plug the phone in to turn this on.')),
     d.revoked ? null : h('div', { class: 'row' }, h('button', { class: 'danger', onclick: () => revoke(d) }, 'Revoke this phone')),
   )));
 }
@@ -45,6 +53,33 @@ async function loadDevices() {
 async function savePermissions(deviceId) {
   const granted = [...document.querySelectorAll(`input[data-device="${deviceId}"]:checked`)].map((i) => i.dataset.perm);
   await api(`/devices/${deviceId}/permissions`, { method: 'PUT', body: JSON.stringify({ permissions: granted }) });
+}
+
+// what each outcome of turning Wi-Fi on means for the user (WifiSetupResult on the agent)
+const wifiMessages = {
+  Ok: 'Done.',
+  NoAdb: "adb isn't installed on this computer (needed once, to set Wi-Fi up over USB).",
+  NotPluggedIn: 'Plug the phone in over USB to turn Wi-Fi on. Turning it off works any time.',
+  AppNotReady: "The app on the phone isn't ready. Open it once, wait a few seconds, and try again.",
+  PhoneKeyRefused: "The phone's app didn't give a valid Wi-Fi key. Update the app and try again.",
+  PhoneRefused: "The phone's app didn't accept the Wi-Fi details. Update the app and try again.",
+  NoAddress: "This computer isn't on a private network right now (home or office Wi-Fi or Ethernet).",
+};
+
+async function setWifi(d, box) {
+  const on = box.checked;
+  box.disabled = true;
+  const msg = $(`wifi-msg-${d.id}`);
+  msg.textContent = on ? 'Setting up over USB…' : 'Turning off…';
+  try {
+    const { result } = await api(`/devices/${d.id}/wifi`, { method: 'POST', body: JSON.stringify({ on }) });
+    if (result !== 'Ok') { msg.textContent = wifiMessages[result] || result; box.checked = !on; box.disabled = false; return; }
+    await loadDevices();
+  } catch (e) {
+    msg.textContent = String(e.message || e);
+    box.checked = !on;
+    box.disabled = false;
+  }
 }
 
 async function revoke(d) {

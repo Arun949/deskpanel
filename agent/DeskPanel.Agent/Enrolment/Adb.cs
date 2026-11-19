@@ -84,6 +84,52 @@ public sealed partial class Adb(IToolRunner tools, string? adbPath = null)
         return ParseBundle(r.Output).GetValueOrDefault("ok") == "true";
     }
 
+    /// <summary>
+    /// Asks the app for the public key of its Wi-Fi client key (made in the Android Keystore, never exportable) and
+    /// returns its pin, or null if the app didn't give a valid P-256 key. Same uid-2000 lock as enrolment.
+    /// </summary>
+    public async Task<string?> WifiClientPinAsync(string serial, CancellationToken ct)
+    {
+        var r = await RunAsync(["-s", Serial(serial), "shell", "content", "call", "--uri", $"content://{EnrolAuthority}", "--method", "wifiKey"], ct);
+        return r.ExitCode == 0 ? PinFromSpki(ParseBundle(r.Output).GetValueOrDefault("spki")) : null;
+    }
+
+    /// <summary>Gives the app what it needs to reach this agent over Wi-Fi, or (null) tells it to forget Wi-Fi.</summary>
+    public async Task<bool> SetWifiAsync(string serial, int? port, string? agentPin, IReadOnlyList<string> hosts, CancellationToken ct)
+    {
+        IReadOnlyList<string> args;
+        if (port is null) args = ["-s", Serial(serial), "shell", "content", "call", "--uri", $"content://{EnrolAuthority}", "--method", "wifiOff"];
+        else
+        {
+            // every value is checked here, because adb shell passes the command line through the phone's shell
+            if (port is < 1024 or > 65535 || agentPin is null || !KeyRe().IsMatch(agentPin)) throw new ArgumentException("bad Wi-Fi details");
+            var clean = hosts.Where(h => System.Net.IPAddress.TryParse(h, out var a) && a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                .Take(4).ToList();
+            if (clean.Count == 0) throw new ArgumentException("no address to give the phone");
+            args = ["-s", Serial(serial), "shell", "content", "call", "--uri", $"content://{EnrolAuthority}", "--method", "wifiOn",
+                "--extra", $"port:i:{port}", "--extra", $"pin:s:{agentPin}", "--extra", $"hosts:s:{string.Join(',', clean)}"];
+        }
+        return ParseBundle((await RunAsync(args, ct)).Output).GetValueOrDefault("ok") == "true";
+    }
+
+    /// <summary>
+    /// The pin of a SubjectPublicKeyInfo sent by the app as base64url, only if it really is an EC P-256 public key
+    /// (anything else, including garbage, gives null).
+    /// </summary>
+    public static string? PinFromSpki(string? base64Url)
+    {
+        if (base64Url is null || base64Url.Length is < 80 or > 200 || !Base64UrlRe().IsMatch(base64Url)) return null;
+        try
+        {
+            var der = Convert.FromBase64String(base64Url.Replace('-', '+').Replace('_', '/').PadRight((base64Url.Length + 3) / 4 * 4, '='));
+            using var key = System.Security.Cryptography.ECDsa.Create();
+            key.ImportSubjectPublicKeyInfo(der, out var read);
+            if (read != der.Length || key.KeySize != 256 || key.ExportParameters(false).Curve.Oid.Value != "1.2.840.10045.3.1.7") return null;
+            return Security.Wifi.WifiIdentity.SpkiPin(der);
+        }
+        catch (Exception e) when (e is FormatException or System.Security.Cryptography.CryptographicException) { return null; }
+    }
+
     public async Task EnsureReverseAsync(string serial, int port, CancellationToken ct)
     {
         var rule = $"tcp:{port}";
@@ -140,4 +186,5 @@ public sealed partial class Adb(IToolRunner tools, string? adbPath = null)
     [GeneratedRegex("^[0-9a-f]{16}$")] private static partial Regex DeviceIdRe();
     [GeneratedRegex("^[A-Za-z0-9_-]{43}$")] private static partial Regex KeyRe();
     [GeneratedRegex(@"Bundle\[\{(.*)\}\]")] private static partial Regex BundleRe();
+    [GeneratedRegex("^[A-Za-z0-9_-]+$")] private static partial Regex Base64UrlRe();
 }

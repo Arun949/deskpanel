@@ -71,8 +71,13 @@ public sealed class AdbEnrollerTests : IDisposable
         };
     }
 
-    private AdbEnroller Enroller(bool allow) =>
-        new(new Adb(_tools, "/fake/adb"), _store, new FixedPrompt(allow), new AgentOptions(8765), NullLogger<AdbEnroller>.Instance);
+    private AdbEnroller Enroller(bool allow) => Enroller(new FixedPrompt(allow));
+
+    private AdbEnroller Enroller(FixedPrompt prompt)
+    {
+        var adb = new Adb(_tools, "/fake/adb");
+        return new(adb, _store, prompt, new AgentOptions(8765), WifiSetupTests.Setup(adb, _store, _home), NullLogger<AdbEnroller>.Instance);
+    }
 
     [Fact]
     public async Task ADeclinedPhoneIsNotEnrolledAndGetsNoTunnel()
@@ -111,8 +116,7 @@ public sealed class AdbEnrollerTests : IDisposable
         var (device, _) = _store.Enrol("PHONE1", "Pixel 4a");
         _appHasId = device.Id;
         var prompt = new FixedPrompt(allow: false);
-        await new AdbEnroller(new Adb(_tools, "/fake/adb"), _store, prompt, new AgentOptions(8765), NullLogger<AdbEnroller>.Instance)
-            .RoundAsync(CancellationToken.None);
+        await Enroller(prompt).RoundAsync(CancellationToken.None);
         Assert.Equal(0, prompt.Asked);
         Assert.Contains(_tools.Calls, c => c.Contains("reverse tcp:8765 tcp:8765", StringComparison.Ordinal));
     }
@@ -123,8 +127,7 @@ public sealed class AdbEnrollerTests : IDisposable
         _store.Enrol("PHONE1", "Pixel 4a");
         _appHasId = null; // app reinstalled
         var prompt = new FixedPrompt(allow: false);
-        await new AdbEnroller(new Adb(_tools, "/fake/adb"), _store, prompt, new AgentOptions(8765), NullLogger<AdbEnroller>.Instance)
-            .RoundAsync(CancellationToken.None);
+        await Enroller(prompt).RoundAsync(CancellationToken.None);
         Assert.Equal(1, prompt.Asked);
     }
 
@@ -135,8 +138,7 @@ public sealed class AdbEnrollerTests : IDisposable
         var (device, _) = _store.Enrol("PHONE1", "Pixel 4a");
         _appSilent = true;
         var prompt = new FixedPrompt(allow: true);
-        await new AdbEnroller(new Adb(_tools, "/fake/adb"), _store, prompt, new AgentOptions(8765), NullLogger<AdbEnroller>.Instance)
-            .RoundAsync(CancellationToken.None);
+        await Enroller(prompt).RoundAsync(CancellationToken.None);
         Assert.Equal(0, prompt.Asked);
         Assert.False(_store.Active(device.Id) is null);
         Assert.DoesNotContain(_tools.Calls, c => c.Contains("--method enrol", StringComparison.Ordinal));
