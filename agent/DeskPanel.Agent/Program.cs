@@ -85,6 +85,7 @@ if (OperatingSystem.IsMacOS())
     s.AddSingleton<ISystemMetrics, MacSystemMetrics>();
     s.AddSingleton<IMediaSource, MacMediaSource>();
     s.AddSingleton<IVolumeSource, MacVolumeSource>();
+    s.AddSingleton<IPresenceSource, MacPresence>();
     s.AddSingleton<MacControls>();
     s.AddSingleton<IMediaControl>(sp => sp.GetRequiredService<MacControls>());
     s.AddSingleton<IVolumeControl>(sp => sp.GetRequiredService<MacControls>());
@@ -96,6 +97,7 @@ if (OperatingSystem.IsMacOS())
 else if (OperatingSystem.IsWindows())
 {
     s.AddSingleton<ISystemMetrics, WindowsSystemMetrics>();
+    s.AddSingleton<IPresenceSource>(new WindowsPresence());
     var audio = new WindowsAudio(); // created here, inside the Windows check (the platform analyser follows it)
     s.AddSingleton<IVolumeSource>(audio);
     s.AddSingleton<IVolumeControl>(audio);
@@ -120,6 +122,7 @@ else
     s.AddSingleton<ISystemMetrics>(unsupported);
     s.AddSingleton<IMediaSource>(unsupported);
     s.AddSingleton<IVolumeSource>(unsupported);
+    s.AddSingleton<IPresenceSource>(unsupported);
     s.AddSingleton<IMediaControl>(none);
     s.AddSingleton<IVolumeControl>(none);
     s.AddSingleton<IAppLauncher>(none);

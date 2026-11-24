@@ -8,6 +8,7 @@ import { isNight, pixelShift } from './screen';
 import './widgets/clock';
 import './widgets/controls';
 import './widgets/nowPlaying';
+import './widgets/onAir';
 import './widgets/pomodoro';
 import './widgets/stat';
 
@@ -19,6 +20,7 @@ const LIVE: LiveView = {
   metrics: { cpu: 12, ramUsedGb: 8, ramTotalGb: 16, netDownBps: 1000, netUpBps: 10 },
   media: { app: 'Spotify', state: 'playing', title: 'T', artist: 'A', album: null, positionMs: 1000, durationMs: 9000 },
   volume: { level: 40, muted: false },
+  presence: { camera: false, mic: true },
   receivedAt: 0,
 };
 
@@ -32,7 +34,7 @@ describe('widget catalogue', () => {
     const page = new Page(root, LIVE);
     const options = Object.fromEntries(def.options.map((o) => [o.key, o.default]));
     page.mount([{ id: 'x', type: def.type, x: 0, y: 0, w: def.w, h: def.h, options }]);
-    for (const kind of ['tick', 'metrics', 'media', 'volume', 'layout'] as const) page.emit(kind);
+    for (const kind of ['tick', 'metrics', 'media', 'volume', 'presence', 'layout'] as const) page.emit(kind);
     const box = root.querySelector('.card')!;
     expect(box).not.toBeNull();
     expect(box.textContent).not.toMatch(new RegExp(`^${def.type}: `)); // the error box a throwing widget shows

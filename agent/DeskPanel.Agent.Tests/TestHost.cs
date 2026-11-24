@@ -48,6 +48,7 @@ public class TestHost : WebApplicationFactory<Program>
         s.AddSingleton<ISystemMetrics>(Sources);
         s.AddSingleton<IMediaSource>(Sources);
         s.AddSingleton<IVolumeSource>(Sources);
+        s.RemoveAll<IPresenceSource>(); s.AddSingleton<IPresenceSource>(Sources);
         s.RemoveAll<IMediaControl>(); s.AddSingleton<IMediaControl>(Controls);
         s.RemoveAll<IVolumeControl>(); s.AddSingleton<IVolumeControl>(Controls);
         s.RemoveAll<IAppLauncher>(); s.AddSingleton<IAppLauncher>(Controls);
@@ -125,8 +126,10 @@ public sealed class KestrelTestHost : TestHost
     }
 }
 
-public sealed class FakeSources : ISystemMetrics, IMediaSource, IVolumeSource
+public sealed class FakeSources : ISystemMetrics, IMediaSource, IVolumeSource, IPresenceSource
 {
+    public PresenceSnapshot? Presence { get; set; } = new(false, false);
+    public PresenceSnapshot? Read() => Presence;
     public MetricsSnapshot Metrics { get; set; } = new(12.5, 8.1, 16, 1000, 200);
     public MediaSnapshot? Media { get; set; } = new("Spotify", "playing", "Song", "Artist", "Album", 1000, 200000);
     public VolumeSnapshot Volume { get; set; } = new(40, false);

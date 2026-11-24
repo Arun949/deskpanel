@@ -78,11 +78,14 @@ def main():
         check(layout_status == 200, f"/layout: {layout_status}")
 
         metrics = (state or {}).get("metrics") or {}
-        print(f"{platform.system()}: metrics={metrics} volume={(state or {}).get('volume')} media={(state or {}).get('media')}")
+        print(f"{platform.system()}: metrics={metrics} volume={(state or {}).get('volume')} media={(state or {}).get('media')} presence={(state or {}).get('presence')}")
         if platform.system() in ("Windows", "Darwin"):
             check(isinstance(metrics.get("cpu"), (int, float)), "CPU must be a number on this OS")
             check((metrics.get("ramTotalGb") or 0) > 0, "total memory must be > 0 on this OS")
             check((metrics.get("ramUsedGb") or 0) > 0, "used memory must be > 0 on this OS")
+            presence = (state or {}).get("presence") or {}
+            check(isinstance(presence.get("camera"), bool) and isinstance(presence.get("mic"), bool),
+                  f"camera/mic in-use must be yes/no on this OS: {presence}")
         return failures
     finally:
         agent.terminate()

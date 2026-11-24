@@ -1,13 +1,15 @@
 namespace DeskPanel.Agent.State;
 
 /// <summary>The live state a phone sees. Immutable; a new instance (and Version) per change.</summary>
-public sealed record AgentState(long Version, long Ts, MetricsSnapshot? Metrics, MediaSnapshot? Media, VolumeSnapshot? Volume);
+public sealed record AgentState(long Version, long Ts, MetricsSnapshot? Metrics, MediaSnapshot? Media, VolumeSnapshot? Volume,
+    PresenceSnapshot? Presence = null);
 
 /// <summary>
 /// Samples the sources and keeps the latest <see cref="AgentState"/>. Routes only read it. Sampling runs only while a
 /// phone has asked for state in the last 30 s (PhoneBox sampled every second forever, Module 6).
 /// </summary>
-public sealed partial class StateHub(ISystemMetrics metrics, IMediaSource media, IVolumeSource volume, ILogger<StateHub> log)
+public sealed partial class StateHub(ISystemMetrics metrics, IMediaSource media, IVolumeSource volume, ILogger<StateHub> log,
+    IPresenceSource? presence = null)
     : BackgroundService
 {
     internal static readonly TimeSpan IdleAfter = TimeSpan.FromSeconds(30);
@@ -61,28 +63,29 @@ public sealed partial class StateHub(ISystemMetrics metrics, IMediaSource media,
         }
     }
 
-    /// <summary>One round: metrics every second; media and volume (helper processes) every other second.</summary>
+    /// <summary>One round: metrics and presence every second (native calls); media and volume (helper processes) every other second.</summary>
     internal async Task SampleOnceAsync(bool slow, CancellationToken ct)
     {
         var current = Current;
         var m = Safe(metrics.Sample, current.Metrics);
         var md = current.Media;
         var v = current.Volume;
+        var p = presence is null ? null : Safe<PresenceSnapshot>(() => presence.Read()!, current.Presence);
         if (slow)
         {
             md = await SafeAsync(media.ReadAsync, ct).ConfigureAwait(false); // null = nothing playing
             v = await SafeAsync(volume.ReadAsync, ct).ConfigureAwait(false) ?? current.Volume;
         }
-        Publish(m, md, v);
+        Publish(m, md, v, p);
     }
 
-    internal void Publish(MetricsSnapshot? m, MediaSnapshot? md, VolumeSnapshot? v)
+    internal void Publish(MetricsSnapshot? m, MediaSnapshot? md, VolumeSnapshot? v, PresenceSnapshot? p = null)
     {
         TaskCompletionSource? fire = null;
         lock (_lock)
         {
-            if (Equals(m, _state.Metrics) && Equals(md, _state.Media) && Equals(v, _state.Volume)) return;
-            _state = new AgentState(_state.Version + 1, Now(), m, md, v);
+            if (Equals(m, _state.Metrics) && Equals(md, _state.Media) && Equals(v, _state.Volume) && Equals(p, _state.Presence)) return;
+            _state = new AgentState(_state.Version + 1, Now(), m, md, v, p);
             fire = _changed;
             _changed = NewSignal();
         }

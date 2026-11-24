@@ -1,5 +1,6 @@
 import './widgets/clock';
 import './widgets/nowPlaying';
+import './widgets/onAir';
 import './widgets/pomodoro';
 import './widgets/stat';
 import { setActions } from './widgets/controls';
@@ -22,6 +23,7 @@ const live: LiveView = {
   get metrics() { return state.metrics; },
   get media() { return state.media; },
   get volume() { return state.volume; },
+  get presence() { return state.presence; },
   get receivedAt() { return state.mediaAt; },
 };
 

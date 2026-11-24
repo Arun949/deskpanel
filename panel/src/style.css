@@ -74,3 +74,15 @@ html.night #pager { filter: brightness(0.35); }
 .status[data-kind="ok"] { display: none; }
 .via { position: fixed; right: 10px; bottom: 8px; font-size: 0.7rem; color: var(--muted); opacity: 0.6; pointer-events: none; }
 .status[data-kind="stale"] { color: var(--warn); }
+
+/* On Air light: the card turns red, and (by default) the whole screen glows red around the edges */
+.onair { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; transition: background 0.4s; }
+.onair-title { font-size: clamp(1.2rem, 22cqmin, 4rem); font-weight: 800; letter-spacing: 0.08em; color: var(--muted); }
+.onair-sub { color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
+.onair[data-on="true"] { background: #b3121b; }
+.onair[data-on="true"] .onair-title, .onair[data-on="true"] .onair-sub { color: #fff; }
+.onair[data-on="true"] .onair-title { animation: onair-pulse 2s ease-in-out infinite; }
+html.on-air body { box-shadow: inset 0 0 0 6px #e0202b, inset 0 0 60px 10px rgba(224, 32, 43, 0.55); }
+@keyframes onair-pulse { 50% { opacity: 0.75; } }
+@media (prefers-reduced-motion: reduce) { .onair[data-on="true"] .onair-title { animation: none; } }
+

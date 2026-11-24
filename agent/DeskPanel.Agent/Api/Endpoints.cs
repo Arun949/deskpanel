@@ -17,7 +17,8 @@ public sealed record HelloResponse(string App, int Api, string Version, string R
 /// <summary>Body of <c>GET /api/v1/state</c> and of each stream message. Sections are null when unchanged (stream) or unknown.</summary>
 /// <param name="LayoutVersion">changes when layout.json changes, so the phone reloads its layout at once</param>
 public sealed record StateMessage(string RunId, long Version, long Ts, bool Full,
-    MetricsSnapshot? Metrics, MediaSnapshot? Media, VolumeSnapshot? Volume, string? LayoutVersion = null);
+    MetricsSnapshot? Metrics, MediaSnapshot? Media, VolumeSnapshot? Volume, string? LayoutVersion = null,
+    PresenceSnapshot? Presence = null);
 
 /// <summary>Body of <c>GET /api/v1/wifi</c>: where and how this phone reaches the agent over Wi-Fi.</summary>
 public sealed record WifiInfo(bool Enabled, int? Port, string? Pin, IReadOnlyList<string> Addresses);
@@ -44,7 +45,7 @@ public static partial class Endpoints
         {
             hub.Touch();
             var s = hub.Current;
-            return new StateMessage(run.RunId, s.Version, s.Ts, true, s.Metrics, s.Media, s.Volume, layout.Version);
+            return new StateMessage(run.RunId, s.Version, s.Ts, true, s.Metrics, s.Media, s.Volume, layout.Version, s.Presence);
         }).WithTrust(TrustClass.Device).OverLan();
 
         v1.MapGet("/stream", Stream).WithTrust(TrustClass.Device).OverLan();
@@ -94,7 +95,7 @@ public static partial class Endpoints
             && (wifiKey is null || devices.ActiveOnWifi(wifiKey)?.Id == deviceId);
         ctx.Response.ContentType = "text/event-stream";
         ctx.Response.Headers["X-Accel-Buffering"] = "no";
-        string? lastMetrics = null, lastMedia = null, lastVolume = null;
+        string? lastMetrics = null, lastMedia = null, lastVolume = null, lastPresence = null;
         long? lastFull = null; // null = nothing sent yet, so the first message is always full
         var version = -1L;
         try
@@ -108,17 +109,19 @@ public static partial class Endpoints
                 var full = lastFull is not { } at || Environment.TickCount64 - at >= FullStateEvery.TotalMilliseconds;
                 if (!full && s.Version == version) continue; // woke only to check access: nothing new to send
                 string Ser<T>(T v) => JsonSerializer.Serialize(v, Json);
-                var (m, md, v) = (Ser(s.Metrics), Ser(s.Media), Ser(s.Volume));
+                var (m, md, v, p) = (Ser(s.Metrics), Ser(s.Media), Ser(s.Volume), Ser(s.Presence));
                 var msg = new StateMessage(run.RunId, s.Version, s.Ts, full,
                     full || m != lastMetrics ? s.Metrics : null,
                     full || md != lastMedia ? s.Media : null,
                     full || v != lastVolume ? s.Volume : null,
-                    layout.Version);
+                    layout.Version,
+                    full || p != lastPresence ? s.Presence : null);
                 // a section that became null (nothing playing) must still reach the phone: send a full message then
-                if (!full && ((md != lastMedia && s.Media is null) || (m != lastMetrics && s.Metrics is null) || (v != lastVolume && s.Volume is null)))
-                    msg = msg with { Full = true, Metrics = s.Metrics, Media = s.Media, Volume = s.Volume };
+                if (!full && ((md != lastMedia && s.Media is null) || (m != lastMetrics && s.Metrics is null)
+                              || (v != lastVolume && s.Volume is null) || (p != lastPresence && s.Presence is null)))
+                    msg = msg with { Full = true, Metrics = s.Metrics, Media = s.Media, Volume = s.Volume, Presence = s.Presence };
                 if (msg.Full) lastFull = Environment.TickCount64;
-                (lastMetrics, lastMedia, lastVolume, version) = (m, md, v, s.Version);
+                (lastMetrics, lastMedia, lastVolume, lastPresence, version) = (m, md, v, p, s.Version);
                 await ctx.Response.WriteAsync($"id: {run.RunId}-{s.Version}\nevent: state\ndata: {Ser(msg)}\n\n", ct);
                 await ctx.Response.Body.FlushAsync(ct);
             }

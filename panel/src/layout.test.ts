@@ -4,7 +4,7 @@ import { registerWidget, widgetTypes } from './registry';
 import './widgets/clock';
 import type { LiveView } from './registry';
 
-const LIVE: LiveView = { metrics: null, media: null, volume: null, receivedAt: 0 };
+const LIVE: LiveView = { metrics: null, media: null, volume: null, presence: null, receivedAt: 0 };
 
 const updates: string[] = [];
 registerWidget('probe', {

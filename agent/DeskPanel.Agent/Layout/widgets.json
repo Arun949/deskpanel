@@ -42,5 +42,13 @@
     "options": [
       { "key": "actions", "label": "Actions (ids, comma-separated)", "type": "idlist", "default": "", "maxItems": 12 }
     ]
+  },
+  {
+    "type": "on-air", "name": "On Air", "icon": "🔴", "desc": "Glows red while any app uses the camera or mic, so people know you're on a call.",
+    "w": 3, "h": 2, "minW": 2, "minH": 1,
+    "options": [
+      { "key": "watch", "label": "Light up for", "type": "select", "default": "any", "choices": ["any", "camera", "mic"] },
+      { "key": "glowScreen", "label": "Glow the whole screen", "type": "bool", "default": true }
+    ]
   }
 ]

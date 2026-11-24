@@ -1,13 +1,14 @@
 // The widget contract (adapted from PhoneBox's, Module 10) with types.
 
 /** Kinds of data a widget can ask for. The agent pushes them; `tick` is the panel's own 1 s clock. */
-export type DataKind = 'tick' | 'metrics' | 'media' | 'volume' | 'layout';
+export type DataKind = 'tick' | 'metrics' | 'media' | 'volume' | 'presence' | 'layout';
 
 /** Read access to the live state, given to every widget. */
 export interface LiveView {
   readonly metrics: import('./store').Metrics | null;
   readonly media: import('./store').Media | null;
   readonly volume: import('./store').Volume | null;
+  readonly presence: import('./store').Presence | null;
   /** Local time the media section was last received, to advance the progress bar between messages. */
   readonly receivedAt: number;
 }
