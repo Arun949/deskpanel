@@ -71,6 +71,22 @@ public sealed class DeviceStore
     }
 
     /// <summary>
+    /// Moves a device recorded under a wireless adb connection name (<c>ip:port</c>) to the phone's hardware serial
+    /// (threat model T21). Only for such names: a hardware serial is never overwritten.
+    /// </summary>
+    public bool MoveToHardwareSerial(string id, string hardwareSerial)
+    {
+        lock (_lock)
+        {
+            if (!_devices.Any(d => d.Id == id && !d.Revoked && Enrolment.Adb.IsWirelessName(d.Serial))) return false;
+            _devices = [.. _devices.Select(d => d.Id == id ? d with { Serial = hardwareSerial } : d)];
+            Save();
+        }
+        Changed?.Invoke();
+        return true;
+    }
+
+    /// <summary>
     /// Turns Wi-Fi on for a device with the public-key hash of its Keystore client key, or off (null). Off forgets the
     /// key hash, so that phone's next Wi-Fi handshake fails. Returns false for an unknown or revoked device.
     /// </summary>

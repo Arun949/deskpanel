@@ -25,6 +25,7 @@ public sealed class WifiSetupTests : IDisposable
     private string _phoneSpki = VectorSpki;
     private bool _phoneAcceptsWifi = true;
     private bool _pluggedIn = true;
+    private string _transport = "PHONE1";
 
     public WifiSetupTests()
     {
@@ -34,7 +35,8 @@ public sealed class WifiSetupTests : IDisposable
         _tools.Respond = args =>
         {
             var a = string.Join(' ', args);
-            if (a == "devices") return new(0, _pluggedIn ? "List of devices attached\nPHONE1\tdevice\n" : "List of devices attached\n");
+            if (a == "devices") return new(0, _pluggedIn ? $"List of devices attached\n{_transport}\tdevice\n" : "List of devices attached\n");
+            if (a.EndsWith("getprop ro.serialno", StringComparison.Ordinal)) return new(0, "PHONE1\n");
             if (a.Contains("--method status", StringComparison.Ordinal)) return new(0, $"Result: Bundle[{{enrolled=true, id={_appId}}}]");
             if (a.Contains("--method wifiKey", StringComparison.Ordinal)) return new(0, $"Result: Bundle[{{spki={_phoneSpki}}}]");
             if (a.Contains("--method wifiOn", StringComparison.Ordinal)) return new(0, $"Result: Bundle[{{ok={(_phoneAcceptsWifi ? "true" : "false")}}}]");
@@ -67,6 +69,15 @@ public sealed class WifiSetupTests : IDisposable
         Assert.Contains("--extra port:i:8766", on, StringComparison.Ordinal);
         Assert.Contains("--extra hosts:s:192.168.1.20", on, StringComparison.Ordinal);
         Assert.Contains(new AuditLog(new AgentPaths(_home)).Recent(10), e => e.Action == "wifi.on" && e.DeviceId == _device.Id);
+    }
+
+    /// <summary>T21: wireless adb works for setting Wi-Fi up too (the phone is found by its hardware serial).</summary>
+    [Fact]
+    public async Task OnWorksOverWirelessAdb()
+    {
+        _transport = "10.0.0.5:41235";
+        Assert.Equal(WifiSetupResult.Ok, await Setup().EnableAsync(_device.Id, default));
+        Assert.Contains(_tools.Calls, c => c.StartsWith("-s 10.0.0.5:41235 shell content call", StringComparison.Ordinal) && c.Contains("wifiOn", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -135,12 +146,12 @@ public sealed class WifiSetupTests : IDisposable
     [Fact]
     public async Task PluggingInRefreshesOrClearsTheDetails()
     {
-        await Setup().RefreshAsync(_device, default); // Wi-Fi off: tell the phone to forget any old details
+        await Setup().RefreshAsync(_device, "PHONE1", default); // Wi-Fi off: tell the phone to forget any old details
         Assert.Contains(_tools.Calls, c => c.Contains("--method wifiOff", StringComparison.Ordinal));
 
         await Setup().EnableAsync(_device.Id, default);
         _tools.Calls.Clear();
-        await Setup(hosts: ["10.0.0.7"]).RefreshAsync(_store.Active(_device.Id)!, default); // the computer's address changed
+        await Setup(hosts: ["10.0.0.7"]).RefreshAsync(_store.Active(_device.Id)!, "PHONE1", default); // the computer's address changed
         Assert.Contains(_tools.Calls, c => c.Contains("--extra hosts:s:10.0.0.7", StringComparison.Ordinal));
     }
 

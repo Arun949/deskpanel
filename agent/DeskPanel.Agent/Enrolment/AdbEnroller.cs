@@ -43,20 +43,28 @@ public sealed partial class AdbEnroller(
             _warnedNoAdb = true;
             return;
         }
-        var serials = await adb.DevicesAsync(ct);
-        _opened.IntersectWith(serials); // a phone that was unplugged gets its panel opened again next time
-        foreach (var serial in serials)
+        // adb's name for a connection ("transport") changes between USB and wireless adb; the hardware serial doesn't.
+        // Records and decisions use the serial; adb commands use the transport (threat model T21).
+        var phones = await adb.PhonesAsync(ct);
+        _opened.IntersectWith(phones.Select(p => p.Transport)); // a phone that was unplugged gets its panel opened again next time
+        foreach (var (transport, serial) in phones)
         {
-            if (!await adb.AppInstalledAsync(serial, ct)) continue;
+            if (!await adb.AppInstalledAsync(transport, ct)) continue;
 
-            var device = store.ActiveForSerial(serial);
-            var (status, appId) = await adb.EnrolledIdAsync(serial, ct);
+            var (status, appId) = await adb.EnrolledIdAsync(transport, ct);
             if (status == Adb.KeyStatus.Unknown) { LogNoAnswer(log, serial); continue; } // ask again next round
+            var device = store.ActiveForSerial(serial);
+            // enrolled earlier under a wireless adb name: the app holds that record's key, so it is this phone
+            if (device is null && appId is not null && store.Active(appId) is { } wireless && store.MoveToHardwareSerial(wireless.Id, serial))
+            {
+                LogMoved(log, wireless.Id, serial);
+                device = store.Active(wireless.Id);
+            }
             if (device is null || appId != device.Id)
             {
                 // new phone, or the app lost its key (reinstalled, data cleared): enrol again, with consent
                 if (_declined.TryGetValue(serial, out var at) && DateTimeOffset.UtcNow - at < AskAgainAfter) continue;
-                var model = await adb.ModelAsync(serial, ct);
+                var model = await adb.ModelAsync(transport, ct);
                 LogAsking(log, model, serial);
                 if (!await prompt.AskAsync(model, serial, ct))
                 {
@@ -65,7 +73,7 @@ public sealed partial class AdbEnroller(
                     continue;
                 }
                 var (enrolled, key) = store.Enrol(serial, model);
-                if (!await adb.DeliverKeyAsync(serial, enrolled.Id, key, ct))
+                if (!await adb.DeliverKeyAsync(transport, enrolled.Id, key, ct))
                 {
                     store.Revoke(enrolled.Id); // never keep a key the phone doesn't have
                     LogDeliveryFailed(log, serial);
@@ -75,12 +83,12 @@ public sealed partial class AdbEnroller(
                 LogEnrolled(log, model, enrolled.Id);
             }
 
-            await adb.EnsureReverseAsync(serial, options.Port, ct);
-            if (_opened.Add(serial))
+            await adb.EnsureReverseAsync(transport, options.Port, ct);
+            if (_opened.Add(transport))
             {
                 // just plugged in: bring its Wi-Fi details up to date (or tell it Wi-Fi was turned off meanwhile)
-                if (store.ActiveForSerial(serial) is { } current) await wifi.RefreshAsync(current, ct);
-                await adb.OpenPanelAsync(serial, ct);
+                if (store.ActiveForSerial(serial) is { } current) await wifi.RefreshAsync(current, transport, ct);
+                await adb.OpenPanelAsync(transport, ct);
             }
         }
     }
@@ -97,6 +105,8 @@ public sealed partial class AdbEnroller(
     private static partial void LogDeclined(ILogger logger, string serial);
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not hand the key to the app on {Serial}; enrolment undone")]
     private static partial void LogDeliveryFailed(ILogger logger, string serial);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Device {DeviceId} was enrolled over wireless adb; now known by its hardware serial {Serial}")]
+    private static partial void LogMoved(ILogger logger, string deviceId, string serial);
     [LoggerMessage(Level = LogLevel.Information, Message = "Enrolled {Model} as device {DeviceId}")]
     private static partial void LogEnrolled(ILogger logger, string model, string deviceId);
 }

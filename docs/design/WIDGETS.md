@@ -75,5 +75,6 @@ Agreed 19 Nov 2026: build all of these, in batches. Each feature is finished bef
   agent keyed enrolment on that name, so it asked to enrol the same phone again, and created a second record.
 - **Effect:** nothing is exposed. The old record's key no longer works, because the phone holds only the new one. But
   the old record stays "active" until revoked.
-- **Fix to make:** identify phones by their hardware serial (`ro.serialno`), so USB and wireless adb are the same phone.
-  Tracked as threat-model T21.
+- **Fixed (T21):** phones are now identified by their hardware serial (`ro.serialno`), so USB and wireless adb are
+  the same phone. On the LAVA phone, the record made over wireless adb was moved to its hardware serial on the next
+  start, with no prompt.

@@ -7,6 +7,22 @@ namespace DeskPanel.Agent.Tests;
 
 public sealed class AdbParsingTests
 {
+    [Theory]
+    [InlineData("AGN2DK23HB019713\n", "AGN2DK23HB019713")]
+    [InlineData("  R58M12ABCDE  ", "R58M12ABCDE")]
+    [InlineData("", null)]
+    [InlineData("unknown", null)]
+    [InlineData("0123456789ABCDEF", null)]  // a placeholder some devices report
+    [InlineData("abc;reboot", null)]
+    [InlineData("x", null)]
+    public void HardwareSerialsAreCheckedStrictly(string raw, string? expected) => Assert.Equal(expected, Adb.CleanHardwareSerial(raw));
+
+    [Theory]
+    [InlineData("10.0.0.5:41235", true)]
+    [InlineData("adb-AGN2DK23HB019713-abc._adb-tls-connect._tcp", true)]
+    [InlineData("AGN2DK23HB019713", false)]
+    public void WirelessNamesAreRecognised(string name, bool wireless) => Assert.Equal(wireless, Adb.IsWirelessName(name));
+
     [Fact]
     public void OnlyAuthorizedDevicesWithSafeSerialsAreListed()
     {
@@ -48,6 +64,8 @@ public sealed class AdbEnrollerTests : IDisposable
     private readonly string _home = Directory.CreateTempSubdirectory("deskpanel-enrol-").FullName;
     private readonly FakeTools _tools = new();
     private readonly DeviceStore _store;
+    private string _transport = "PHONE1";      // adb's name for the connection (USB: the serial; wireless: ip:port)
+    private string _hardwareSerial = "PHONE1"; // what the phone reports as ro.serialno
     private bool _deliverOk = true;
     private string? _appHasId;
     private bool _appSilent; // provider unreachable (app restarting)
@@ -58,7 +76,8 @@ public sealed class AdbEnrollerTests : IDisposable
         _tools.Respond = args =>
         {
             var a = string.Join(' ', args);
-            if (a == "devices") return new(0, "List of devices attached\nPHONE1\tdevice\n");
+            if (a == "devices") return new(0, $"List of devices attached\n{_transport}\tdevice\n");
+            if (a.EndsWith("getprop ro.serialno", StringComparison.Ordinal)) return new(0, _hardwareSerial + "\n");
             if (a.EndsWith("pm path app.deskpanel", StringComparison.Ordinal)) return new(0, "package:/data/app/base.apk\n");
             if (a.EndsWith("getprop ro.product.model", StringComparison.Ordinal)) return new(0, "Pixel 4a\n");
             if (a.Contains("--method status", StringComparison.Ordinal) && _appSilent)
@@ -129,6 +148,52 @@ public sealed class AdbEnrollerTests : IDisposable
         var prompt = new FixedPrompt(allow: false);
         await Enroller(prompt).RoundAsync(CancellationToken.None);
         Assert.Equal(1, prompt.Asked);
+    }
+
+    /// <summary>T21: the same phone over wireless adb (adb calls it ip:port) is not a new phone.</summary>
+    [Fact]
+    public async Task AnEnrolledPhoneOverWirelessAdbIsNotAskedAgain()
+    {
+        var (device, _) = _store.Enrol("PHONE1", "Pixel 4a");
+        _appHasId = device.Id;
+        _transport = "10.0.0.5:41235";
+        var prompt = new FixedPrompt(allow: true);
+        await Enroller(prompt).RoundAsync(CancellationToken.None);
+        Assert.Equal(0, prompt.Asked);
+        Assert.Single(_store.All());
+        Assert.Contains(_tools.Calls, c => c.StartsWith("-s 10.0.0.5:41235 reverse tcp:8765", StringComparison.Ordinal)); // adb commands use the connection
+    }
+
+    /// <summary>T21: a phone enrolled under its wireless name before the fix is moved to its hardware serial, not enrolled again.</summary>
+    [Fact]
+    public async Task ARecordFromWirelessAdbMovesToTheHardwareSerial()
+    {
+        var (device, _) = _store.Enrol("10.0.0.5:41235", "Pixel 4a");
+        _appHasId = device.Id;
+        var prompt = new FixedPrompt(allow: true);
+        await Enroller(prompt).RoundAsync(CancellationToken.None); // now on USB, reporting PHONE1
+        Assert.Equal(0, prompt.Asked);
+        Assert.Equal("PHONE1", _store.Active(device.Id)!.Serial);
+    }
+
+    /// <summary>A hardware serial is never overwritten, even if another phone's app claims that record's id.</summary>
+    [Fact]
+    public async Task ARealSerialIsNeverMoved()
+    {
+        var (other, _) = _store.Enrol("OTHERPHONE", "Pixel 7");
+        _appHasId = other.Id; // a different phone (PHONE1) claiming another phone's device id
+        var prompt = new FixedPrompt(allow: false);
+        await Enroller(prompt).RoundAsync(CancellationToken.None);
+        Assert.Equal("OTHERPHONE", _store.Active(other.Id)!.Serial);
+        Assert.Equal(1, prompt.Asked); // treated as a new phone: the user decides
+    }
+
+    [Fact]
+    public async Task WithoutAHardwareSerialTheConnectionNameIsUsed()
+    {
+        _hardwareSerial = "";
+        await Enroller(allow: true).RoundAsync(CancellationToken.None);
+        Assert.Equal("PHONE1", Assert.Single(_store.All()).Serial);
     }
 
     /// <summary>Regression: a status check that fails must not revoke a working key or prompt (seen on a real phone).</summary>

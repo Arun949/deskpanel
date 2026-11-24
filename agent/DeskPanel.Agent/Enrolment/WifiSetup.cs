@@ -27,19 +27,20 @@ public sealed partial class WifiSetup(
         var device = store.Active(deviceId);
         if (device is null) return WifiSetupResult.NotFound;
         if (adb.Path is null) return WifiSetupResult.NoAdb;
-        if (!(await adb.DevicesAsync(ct)).Contains(device.Serial)) return WifiSetupResult.NotPluggedIn;
+        // found by hardware serial, so USB and wireless adb both work (threat model T21)
+        if (await adb.TransportForAsync(device.Serial, ct) is not { } transport) return WifiSetupResult.NotPluggedIn;
         // the app on the cable must be the one holding this device's key (not a reinstall waiting for enrolment)
-        if (await adb.EnrolledIdAsync(device.Serial, ct) is not (Adb.KeyStatus.Enrolled, var id) || id != device.Id)
+        if (await adb.EnrolledIdAsync(transport, ct) is not (Adb.KeyStatus.Enrolled, var id) || id != device.Id)
             return WifiSetupResult.AppNotReady;
 
-        var clientPin = await adb.WifiClientPinAsync(device.Serial, ct);
+        var clientPin = await adb.WifiClientPinAsync(transport, ct);
         if (clientPin is null) return WifiSetupResult.PhoneKeyRefused;
         var hosts = Addresses();
         if (hosts.Count == 0) return WifiSetupResult.NoAddress;
 
         store.SetWifi(device.Id, clientPin); // opens the listener (and makes the agent's key) if this is the first phone
         var agentPin = services.GetRequiredService<WifiIdentity>().Pin;
-        if (!await adb.SetWifiAsync(device.Serial, settings.Port, agentPin, hosts, ct))
+        if (!await adb.SetWifiAsync(transport, settings.Port, agentPin, hosts, ct))
         {
             store.SetWifi(device.Id, null); // never leave Wi-Fi on for a phone that doesn't know how to use it
             return WifiSetupResult.PhoneRefused;
@@ -57,8 +58,8 @@ public sealed partial class WifiSetup(
         store.SetWifi(device.Id, null);
         audit.Write(new AuditEntry(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), device.Id, "wifi.off", "ok", 0));
         LogOff(log, device.Model, device.Id);
-        if (adb.Path is not null && (await adb.DevicesAsync(ct)).Contains(device.Serial))
-            await adb.SetWifiAsync(device.Serial, null, null, [], ct); // best effort: the agent side is what counts
+        if (adb.Path is not null && await adb.TransportForAsync(device.Serial, ct) is { } transport)
+            await adb.SetWifiAsync(transport, null, null, [], ct); // best effort: the agent side is what counts
         return WifiSetupResult.Ok;
     }
 
@@ -66,12 +67,12 @@ public sealed partial class WifiSetup(
     /// Called when an enrolled phone is plugged in: brings its Wi-Fi details up to date (the computer's address may
     /// have changed), or tells it to forget Wi-Fi if it was turned off while unplugged.
     /// </summary>
-    public async Task RefreshAsync(EnrolledDevice device, CancellationToken ct)
+    public async Task RefreshAsync(EnrolledDevice device, string transport, CancellationToken ct)
     {
         if (device is { Wifi: true, ClientSpki: not null } && Addresses() is { Count: > 0 } hosts)
-            await adb.SetWifiAsync(device.Serial, settings.Port, services.GetRequiredService<WifiIdentity>().Pin, hosts, ct);
+            await adb.SetWifiAsync(transport, settings.Port, services.GetRequiredService<WifiIdentity>().Pin, hosts, ct);
         else
-            await adb.SetWifiAsync(device.Serial, null, null, [], ct);
+            await adb.SetWifiAsync(transport, null, null, [], ct);
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Wi-Fi turned on for {Model} ({DeviceId})")]

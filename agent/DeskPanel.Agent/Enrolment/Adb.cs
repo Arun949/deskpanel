@@ -40,6 +40,39 @@ public sealed partial class Adb(IToolRunner tools, string? adbPath = null)
     public async Task<IReadOnlyList<string>> DevicesAsync(CancellationToken ct) =>
         ParseDevices((await RunAsync(["devices"], ct)).Output);
 
+    /// <summary>
+    /// The phone's own hardware serial (<c>ro.serialno</c>), which stays the same over USB and wireless adb, where adb's
+    /// name for the connection doesn't (wireless adb calls it <c>ip:port</c>; threat model T21). Falls back to adb's
+    /// name if the phone doesn't report one.
+    /// </summary>
+    public async Task<string> HardwareSerialAsync(string transport, CancellationToken ct)
+    {
+        var r = await RunAsync(["-s", Serial(transport), "shell", "getprop", "ro.serialno"], ct);
+        return CleanHardwareSerial(r.ExitCode == 0 ? r.Output : "") ?? transport;
+    }
+
+    /// <summary>Each attached phone as (adb's name for the connection, its hardware serial).</summary>
+    public async Task<IReadOnlyList<(string Transport, string Serial)>> PhonesAsync(CancellationToken ct)
+    {
+        var list = new List<(string, string)>();
+        foreach (var transport in await DevicesAsync(ct)) list.Add((transport, await HardwareSerialAsync(transport, ct)));
+        return list;
+    }
+
+    /// <summary>adb's name for the connection to the phone with this hardware serial, or null if it isn't attached.</summary>
+    public async Task<string?> TransportForAsync(string hardwareSerial, CancellationToken ct) =>
+        (await PhonesAsync(ct)).Where(p => p.Serial == hardwareSerial).Select(p => p.Transport).FirstOrDefault();
+
+    /// <summary>A plausible hardware serial (letters, digits, dot, dash, underscore), or null. Pure, so it is tested.</summary>
+    public static string? CleanHardwareSerial(string raw)
+    {
+        var s = raw.Trim();
+        return HardwareSerialRe().IsMatch(s) && s is not ("unknown" or "0123456789ABCDEF") ? s : null;
+    }
+
+    /// <summary>A wireless adb connection name (<c>ip:port</c> or an mDNS name), never a hardware serial.</summary>
+    public static bool IsWirelessName(string serial) => serial.Contains(':', StringComparison.Ordinal) || serial.Contains("._adb", StringComparison.Ordinal);
+
     public async Task<string> ModelAsync(string serial, CancellationToken ct) =>
         CleanModel((await RunAsync(["-s", Serial(serial), "shell", "getprop", "ro.product.model"], ct)).Output);
 
@@ -187,4 +220,5 @@ public sealed partial class Adb(IToolRunner tools, string? adbPath = null)
     [GeneratedRegex("^[A-Za-z0-9_-]{43}$")] private static partial Regex KeyRe();
     [GeneratedRegex(@"Bundle\[\{(.*)\}\]")] private static partial Regex BundleRe();
     [GeneratedRegex("^[A-Za-z0-9_-]+$")] private static partial Regex Base64UrlRe();
+    [GeneratedRegex("^[A-Za-z0-9._-]{4,64}$")] private static partial Regex HardwareSerialRe();
 }
